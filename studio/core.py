@@ -26,6 +26,7 @@ def parse_versions_yaml(path: str) -> list[dict]:
     """Parse the strict versions.yaml shape emitted by the roadmap generator."""
     out: list[dict] = []
     cur: Optional[dict] = None
+    keys = ("ordinal", "gate", "series", "deliver", "highlights", "acceptance", "status")
     with open(path, "r", encoding="utf-8") as fh:
         for raw in fh:
             line = raw.rstrip("\n")
@@ -33,10 +34,15 @@ def parse_versions_yaml(path: str) -> list[dict]:
                 if cur:
                     out.append(cur)
                 cur = {"version": line.split(":", 1)[1].strip().strip('"')}
-            elif cur is not None and line.strip().startswith(("gate:", "series:", "deliver:",
-                                                              "acceptance:", "status:")):
+            elif cur is not None and line.strip().startswith(tuple(k + ":" for k in keys)):
                 k, _, v = line.strip().partition(":")
-                cur[k.strip()] = v.strip().strip('"')
+                val = v.strip().strip('"')
+                if k.strip() == "ordinal":
+                    try:
+                        val = int(val)
+                    except ValueError:
+                        pass
+                cur[k.strip()] = val
     if cur:
         out.append(cur)
     return out
@@ -120,6 +126,74 @@ class ReleaseStudio:
     def versions(self) -> list[dict]:
         return parse_versions_yaml(os.path.join(self.root, "release", "versions.yaml"))
 
+    # ---- released registry: prevents duplicate publish and enforces 1/day ----
+    def released_path(self) -> str:
+        return os.path.join(self.root, "release", "released.json")
+
+    def released(self) -> dict:
+        p = self.released_path()
+        if not os.path.exists(p):
+            return {}
+        try:
+            with open(p, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except (OSError, ValueError):
+            return {}
+
+    def _record_release(self, version: str) -> None:
+        data = self.released()
+        data[version] = {"released_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                         "date": time.strftime("%Y-%m-%d")}
+        with open(self.released_path(), "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, sort_keys=True, indent=2)
+
+    def _released_today(self) -> Optional[str]:
+        today = time.strftime("%Y-%m-%d")
+        for v, info in self.released().items():
+            if info.get("date") == today:
+                return v
+        return None
+
+    def versions_full(self) -> list[dict]:
+        """All roadmap versions + the initial 1.0.0, each with released status.
+
+        This is what the web console lists: every version, its ordinal, what it
+        changed, its benefit, its gate, and whether it has been released.
+        """
+        vs = self.versions()
+        rel = self.released()
+        items = [{
+            "version": "1.0.0", "ordinal": 0,
+            "series": "初始版本", "gate": "—",
+            "deliver": "首个正式版本 aegis：守护进程/指标/规则/策略/执行/审计/面板",
+            "highlights": "完整可用的 1.0.0 基线：装得上、跑得稳、能回滚、有审计",
+            "acceptance": "50 项端到端自测通过",
+            "status": "implemented_local",
+            "released": True,
+            "released_at": "2026-11-07",
+        }]
+        for v in vs:
+            ver = v["version"]
+            items.append({
+                "version": ver,
+                "ordinal": v.get("ordinal", 0),
+                "series": v.get("series", ""),
+                "gate": v.get("gate", ""),
+                "deliver": v.get("deliver", ""),
+                "highlights": v.get("highlights", ""),
+                "acceptance": v.get("acceptance", ""),
+                "status": v.get("status", "pending"),
+                "released": ver in rel,
+                "released_at": rel.get(ver, {}).get("released_at", ""),
+            })
+        return items
+
+    def version_detail(self, version: str) -> Optional[dict]:
+        for item in self.versions_full():
+            if item["version"] == version:
+                return item
+        return None
+
     def release_yaml(self) -> str:
         return os.path.join(self.root, "release", "release.yaml")
 
@@ -145,6 +219,14 @@ class ReleaseStudio:
         # gate from the roadmap must match the gate key passed in
         if st["next_detail"] and st["next_detail"].get("gate") != gate:
             return {"ok": False, "reason": "gate_mismatch"}
+        # duplicate publish guard: a version is published at most once
+        if target in self.released():
+            return {"ok": False, "reason": "already_released", "version": target}
+        # one version per day guard (constitution release cadence)
+        today_ver = self._released_today()
+        if today_ver:
+            return {"ok": False, "reason": "already_released_today",
+                    "version": today_ver, "note": "一天最多发布一版"}
         # one-step only: target must be exactly current + one roadmap entry
         code, log = self.runner(["git", "tag", f"v{target}"])
         receipt = {
@@ -162,9 +244,29 @@ class ReleaseStudio:
             write_release_version(self.release_yaml(), target)
             self._write_changelog(target, gate, notes)
             self._write_channel(target)
+            self._record_release(target)
+            self._write_version_snapshot(target, st["next_detail"])
         with open(os.path.join(self.receipts_dir, f"{target}.json"), "w", encoding="utf-8") as fh:
             json.dump(receipt, fh, ensure_ascii=False, sort_keys=True)
         return receipt
+
+    def _write_version_snapshot(self, version: str, detail: Optional[dict]) -> None:
+        """Write a per-version doc snapshot; existing versions are never overwritten."""
+        snap_dir = os.path.join(self.root, "release", "docs")
+        os.makedirs(snap_dir, exist_ok=True)
+        path = os.path.join(snap_dir, f"{version}.md")
+        if os.path.exists(path):
+            return  # snapshots are immutable once written
+        d = detail or {}
+        body = (f"# {version}\n\n"
+                f"- 系列：{d.get('series','')}\n"
+                f"- 闸门键：{d.get('gate','')}\n"
+                f"- 交付：{d.get('deliver','')}\n"
+                f"- 优点：{d.get('highlights','')}\n"
+                f"- 验收：{d.get('acceptance','')}\n"
+                f"- 发布日期：{time.strftime('%Y-%m-%d')}\n")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(body)
 
     def retract(self, version: str) -> dict:
         code, log = self.runner(["git", "tag", "-d", f"v{version}"])

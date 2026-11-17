@@ -95,6 +95,58 @@ class TestStudio(unittest.TestCase):
         st = self.studio.state()
         self.assertNotEqual(st["next"], "1.0.2")
 
+    def test_versions_full_has_121_items(self):
+        items = self.studio.versions_full()
+        self.assertEqual(len(items), 121)
+        self.assertEqual(items[0]["version"], "1.0.0")
+        self.assertTrue(items[0]["released"])
+        self.assertEqual(items[1]["version"], "1.0.1")
+        self.assertEqual(items[1]["ordinal"], 1)
+        self.assertEqual(items[-1]["version"], "3.0.3")
+        self.assertEqual(items[-1]["ordinal"], 120)
+        # every item carries a highlight (benefit) and a gate
+        self.assertTrue(all(it.get("highlights") for it in items[1:]))
+
+    def test_version_detail(self):
+        d = self.studio.version_detail("1.2.0")
+        self.assertIsNotNone(d)
+        self.assertEqual(d["ordinal"], 28)
+        self.assertIn("highlights", d)
+
+    def test_publish_duplicate_rejected(self):
+        st = self.studio.state()
+        gate = st["next_detail"]["gate"]
+        r1 = self.studio.publish(preflight_ok=True, gate=gate)
+        self.assertEqual(r1["version"], "1.0.1")
+        self.assertIn("1.0.1", self.studio.released())
+        # retract rolls the version back, but the version stays recorded as
+        # released -> a republish of the same version must be refused.
+        self.studio.retract("1.0.1")
+        core.write_release_version(self.studio.release_yaml(), "1.0.0")
+        r2 = self.studio.publish(preflight_ok=True, gate="fix_quarantine")
+        self.assertIn(r2["reason"], ("already_released", "already_released_today"))
+
+    def test_one_version_per_day(self):
+        st = self.studio.state()
+        self.studio.publish(preflight_ok=True, gate=st["next_detail"]["gate"])
+        # a second, different version on the same day is refused
+        st2 = self.studio.state()
+        r = self.studio.publish(preflight_ok=True, gate=st2["next_detail"]["gate"])
+        self.assertEqual(r["reason"], "already_released_today")
+
+    def test_version_snapshot_written_not_overwritten(self):
+        st = self.studio.state()
+        self.studio.publish(preflight_ok=True, gate=st["next_detail"]["gate"])
+        snap = os.path.join(self.tmp, "release", "docs", "1.0.1.md")
+        self.assertTrue(os.path.exists(snap))
+        with open(snap, encoding="utf-8") as fh:
+            first = fh.read()
+        # simulate a re-publish attempt of the same version (should be blocked,
+        # and the snapshot must remain byte-identical / not overwritten)
+        self.studio.publish(preflight_ok=True, gate="fix_quarantine")
+        with open(snap, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), first)
+
 
 if __name__ == "__main__":
     unittest.main()

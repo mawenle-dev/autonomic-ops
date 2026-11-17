@@ -122,8 +122,23 @@ class LedgerAnchor:
         return out
 
 
-def export_bundle(records: list[dict], anchors: list[dict], signer: str = "") -> dict:
-    """Create a signed-by-hash export bundle (Ed25519 plug-in point via signer)."""
+def _bundle_body(bundle: dict) -> dict:
+    """Canonical body used for BOTH the bundle hash and the signature.
+
+    Excludes ``hash`` and ``signature`` so the two operations are consistent
+    regardless of whether a signature has been attached yet.
+    """
+    return {k: v for k, v in bundle.items() if k not in ("hash", "signature")}
+
+
+def export_bundle(records: list[dict], anchors: list[dict], signer: str = "",
+                  private_seed: Optional[bytes] = None) -> dict:
+    """Create a ledger export bundle.
+
+    If a private seed is supplied the bundle is signed with real Ed25519 over
+    its canonical body; ``signer`` is the hex public key. Without a seed the
+    bundle is unsigned (hash-only) and verify_bundle reports signature_ok=None.
+    """
     bundle = {
         "format": "ao-ledger-bundle/1",
         "exported_at": util.iso(),
@@ -131,27 +146,43 @@ def export_bundle(records: list[dict], anchors: list[dict], signer: str = "") ->
         "anchors": anchors,
         "root_hash": fvc.sha([r.get("hash", "") for r in records]),
         "signer": signer,
+        "signature": "",
     }
-    bundle["hash"] = bundle_hash(bundle)
+    # Resolve the signer (public key) BEFORE hashing, so the canonical body is
+    # final when both the hash and the signature are computed over it.
+    if private_seed is not None and not signer:
+        from . import signing
+        bundle["signer"] = signing.hexlify(signing.public_key_from_seed(private_seed))
+    bundle["hash"] = fvc.sha(_bundle_body(bundle))
+    if private_seed is not None:
+        from . import signing
+        bundle["signature"] = signing.hexlify(
+            signing.sign(private_seed, fvc.canon(_bundle_body(bundle)).encode()))
     return bundle
 
 
-def verify_bundle(bundle: dict, signatures: Optional[dict] = None) -> dict:
-    """Offline verification: recompute hashes, optionally check external sig."""
+def verify_bundle(bundle: dict, public_key_hex: Optional[str] = None) -> dict:
+    """Offline verification: recompute hashes and, if present, the Ed25519 sig."""
     errors = []
     root = bundle.get("root_hash")
     calc = fvc.sha([r.get("hash", "") for r in bundle.get("records", [])])
     if root != calc:
         errors.append("root_hash_mismatch")
-    body = {k: v for k, v in bundle.items() if k not in ("hash", "signature")}
-    if bundle.get("hash") != fvc.sha(body):
+    if bundle.get("hash") != fvc.sha(_bundle_body(bundle)):
         errors.append("bundle_hash_mismatch")
     sig_ok = None
-    if signatures and bundle.get("signer"):
-        pub = signatures.get(bundle["signer"])
-        sig_ok = bool(pub)  # real Ed25519 check plugged in at distribution time
+    sig = bundle.get("signature") or ""
+    pub = public_key_hex or bundle.get("signer") or ""
+    if sig and pub:
+        from . import signing
+        try:
+            sig_ok = signing.verify(signing.unhexlify(pub),
+                                    fvc.canon(_bundle_body(bundle)).encode(),
+                                    signing.unhexlify(sig))
+        except Exception:  # noqa: BLE001
+            sig_ok = False
         if not sig_ok:
-            errors.append("signature_unavailable")
+            errors.append("signature_invalid")
     return {"ok": not errors, "errors": errors, "signature_ok": sig_ok,
             "count": len(bundle.get("records", []))}
 

@@ -37,38 +37,55 @@ class TwoKeyVault:
         self.recovery: list[RecoveryCode] = []
 
     def generate(self, seed_policy: str = "", seed_operator: str = "") -> dict:
-        policy = seed_policy or secrets.token_hex(32)
-        operator = seed_operator or secrets.token_hex(32)
-        for path, val in ((self.policy_path, policy), (self.operator_path, operator)):
+        from . import signing
+        # 32-byte Ed25519 seeds, stored as hex (64 chars) with 0600 perms.
+        policy_seed = bytes.fromhex(seed_policy) if seed_policy else signing.generate_keypair()[0]
+        operator_seed = bytes.fromhex(seed_operator) if seed_operator else signing.generate_keypair()[0]
+        for path, seed in ((self.policy_path, policy_seed), (self.operator_path, operator_seed)):
             util.ensure_dir(os.path.dirname(path), 0o700)
             with open(path, "w", encoding="utf-8") as fh:
-                fh.write(val)
+                fh.write(seed.hex())
             os.chmod(path, 0o600)
         return {"policy_generated": True, "operator_generated": True,
+                "backend": signing.backend(),
                 "note": "store the two keys on different media"}
 
     def _load(self, path: str) -> bytes:
         if not os.path.exists(path):
             raise KeyError_(f"key file missing: {path}")
-        with open(path, "rb") as fh:
-            return fh.read().strip()
+        with open(path, "r", encoding="utf-8") as fh:
+            return bytes.fromhex(fh.read().strip())
 
     def sign(self, payload: dict, kind: str) -> str:
-        key = self._load(self.policy_path if kind == "policy" else self.operator_path)
-        return hmac.new(key, fvc.canon(payload).encode(), hashlib.sha256).hexdigest()
+        from . import signing
+        seed = self._load(self.policy_path if kind == "policy" else self.operator_path)
+        return signing.hexlify(signing.sign(seed, fvc.canon(payload).encode()))
+
+    def public_key(self, kind: str) -> bytes:
+        from . import signing
+        seed = self._load(self.policy_path if kind == "policy" else self.operator_path)
+        return signing.public_key_from_seed(seed)
 
     def dual_sign(self, payload: dict) -> dict:
         return {"policy": self.sign(payload, "policy"),
-                "operator": self.sign(payload, "operator")}
+                "operator": self.sign(payload, "operator"),
+                "policy_pub": self.public_key("policy").hex(),
+                "operator_pub": self.public_key("operator").hex()}
 
     def verify_dual(self, payload: dict, signatures: dict) -> tuple[bool, str]:
+        from . import signing
         if not signatures.get("policy") or not signatures.get("operator"):
             return False, "missing_key"
         try:
-            p_ok = hmac.compare_digest(self.sign(payload, "policy"), signatures["policy"])
-            o_ok = hmac.compare_digest(self.sign(payload, "operator"), signatures["operator"])
+            body = fvc.canon(payload).encode()
+            p_ok = signing.verify(self.public_key("policy"), body,
+                                  signing.unhexlify(signatures["policy"]))
+            o_ok = signing.verify(self.public_key("operator"), body,
+                                  signing.unhexlify(signatures["operator"]))
         except KeyError_ as exc:
             return False, str(exc)
+        except Exception:  # noqa: BLE001
+            return False, "dual_signature_invalid"
         if not (p_ok and o_ok):
             return False, "dual_signature_invalid"
         return True, ""

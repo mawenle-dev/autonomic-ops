@@ -42,19 +42,28 @@ class PackManifest:
         return d
 
 
-def sign_manifest(m: PackManifest, key: bytes) -> str:
-    return hmac.new(key, fvc.canon(m.signable()).encode(), hashlib.sha256).hexdigest()
+def sign_manifest(m: PackManifest, private_seed: bytes) -> str:
+    """Sign the manifest with real Ed25519; returns hex signature."""
+    from . import signing
+    body = fvc.canon(m.signable()).encode()
+    return signing.hexlify(signing.sign(private_seed, body))
 
 
-def verify_manifest(m: PackManifest, key: bytes) -> bool:
+def verify_manifest(m: PackManifest, public_key: bytes) -> bool:
+    """Verify the manifest's Ed25519 signature against a public key."""
     if not m.signature:
         return False
-    return hmac.compare_digest(m.signature, sign_manifest(m, key))
+    from . import signing
+    try:
+        body = fvc.canon(m.signable()).encode()
+        return signing.verify(public_key, body, signing.unhexlify(m.signature))
+    except Exception:  # noqa: BLE001
+        return False
 
 
-def build_pack(dest: str, manifest: PackManifest, files: dict[str, bytes], key: bytes) -> str:
+def build_pack(dest: str, manifest: PackManifest, files: dict[str, bytes], private_seed: bytes) -> str:
     """files = {arcname: bytes}. Returns path to the signed tar.gz pack."""
-    manifest.signature = sign_manifest(manifest, key)
+    manifest.signature = sign_manifest(manifest, private_seed)
     util.ensure_dir(os.path.dirname(dest) or ".", 0o750)
     with tarfile.open(dest, "w:gz") as tf:
         mbytes = fvc.canon(manifest.to_dict() | {"signature": manifest.signature}).encode()
@@ -72,9 +81,9 @@ def build_pack(dest: str, manifest: PackManifest, files: dict[str, bytes], key: 
 
 
 class Reliquary:
-    def __init__(self, install_dir: str, key: bytes, snapshot_fn=None):
+    def __init__(self, install_dir: str, public_key: bytes, snapshot_fn=None):
         self.install_dir = install_dir
-        self.key = key
+        self.public_key = public_key      # Ed25519 public key (32 bytes) for verify
         self.snapshot_fn = snapshot_fn
         util.ensure_dir(install_dir, 0o750)
 
@@ -91,7 +100,7 @@ class Reliquary:
 
     def install(self, pack_path: str, allow_unsigned: bool = False) -> dict:
         m = self._read_manifest(pack_path)
-        if not allow_unsigned and not verify_manifest(m, self.key):
+        if not allow_unsigned and not verify_manifest(m, self.public_key):
             return {"ok": False, "reason_code": "unsigned_pack_rejected", "name": m.name}
         # third-party packs may never declare exec capability
         if "exec" in m.capabilities and m.name.startswith("third_party/"):

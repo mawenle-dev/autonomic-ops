@@ -110,27 +110,38 @@ class TestConverge(unittest.TestCase):
 class TestReliquary(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="ao_rel_")
-        self.key = b"test-signing-key"
+        from autonomic import signing
+        self.seed, self.pub = signing.generate_keypair()
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_unsigned_rejected(self):
-        rel = reliquary.Reliquary(os.path.join(self.tmp, "inst"), self.key)
+        rel = reliquary.Reliquary(os.path.join(self.tmp, "inst"), self.pub)
         m = reliquary.PackManifest("rules/test", "1.0", ["read"])
-        p = reliquary.build_pack(os.path.join(self.tmp, "t.tar.gz"), m, {"r.yaml": b"x"}, self.key)
+        p = reliquary.build_pack(os.path.join(self.tmp, "t.tar.gz"), m, {"r.yaml": b"x"}, self.seed)
         m2 = reliquary.PackManifest("rules/test", "1.0", ["read"])
         # tamper signature off
         m2.signature = ""
-        self.assertFalse(reliquary.verify_manifest(m2, self.key))
+        self.assertFalse(reliquary.verify_manifest(m2, self.pub))
 
     def test_signed_install(self):
-        rel = reliquary.Reliquary(os.path.join(self.tmp, "inst"), self.key)
+        rel = reliquary.Reliquary(os.path.join(self.tmp, "inst"), self.pub)
         m = reliquary.PackManifest("rules/ok", "1.0", ["read"])
-        p = reliquary.build_pack(os.path.join(self.tmp, "ok.tar.gz"), m, {"r.yaml": b"content"}, self.key)
+        p = reliquary.build_pack(os.path.join(self.tmp, "ok.tar.gz"), m, {"r.yaml": b"content"}, self.seed)
         res = rel.install(p)
         self.assertTrue(res["ok"])
         self.assertTrue(os.path.exists(os.path.join(self.tmp, "inst", "r.yaml")))
+
+    def test_wrong_key_rejected(self):
+        from autonomic import signing
+        other_seed, other_pub = signing.generate_keypair()
+        rel = reliquary.Reliquary(os.path.join(self.tmp, "inst2"), other_pub)
+        m = reliquary.PackManifest("rules/bad", "1.0", ["read"])
+        p = reliquary.build_pack(os.path.join(self.tmp, "bad.tar.gz"), m, {"r.yaml": b"x"}, self.seed)
+        res = rel.install(p)
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["reason_code"], "unsigned_pack_rejected")
 
     def test_capability_token_one_shot_60s(self):
         t = reliquary.CapabilityToken("plugin:hello")

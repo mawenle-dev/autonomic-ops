@@ -53,9 +53,12 @@ class TestLedger(unittest.TestCase):
         self.assertTrue(bad, "tampered anchor must be flagged")
 
     def test_bundle_offline_verify(self):
-        bundle = ledger.export_bundle(self.records, [], signer="test-key")
-        res = ledger.verify_bundle(bundle, signatures={"test-key": "pub"})
+        from autonomic import signing
+        seed, pub = signing.generate_keypair()
+        bundle = ledger.export_bundle(self.records, [], private_seed=seed)
+        res = ledger.verify_bundle(bundle)
         self.assertTrue(res["ok"])
+        self.assertTrue(res["signature_ok"])
         self.assertEqual(res["count"], 3)
         bundle["records"][0]["hash"] = "tampered"
         res2 = ledger.verify_bundle(bundle)
