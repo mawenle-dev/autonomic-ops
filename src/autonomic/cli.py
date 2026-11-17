@@ -40,6 +40,30 @@ def _print_json(data) -> None:
     print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
 
 
+def result_exit_code(result: Optional[dict], *, invalid: bool = False) -> int:
+    """Unified result -> exit-code map (F-04, constitution D1-D4).
+
+    0 = all succeeded; 2 = partial; 1 = all failed; 3 = bad argument/precondition.
+    All write-style commands route through this so a failed undo can never be
+    reported as success to an automation script.
+    """
+    if invalid:
+        return 3
+    if not result or not isinstance(result, dict):
+        return 1
+    failed = result.get("failed")
+    ok = result.get("ok")
+    restored = result.get("restored") or []
+    removed = result.get("removed") or []
+    failed_n = len(failed) if isinstance(failed, list) else int(bool(failed))
+    success_n = len(restored) + len(removed)
+    if failed_n and success_n:
+        return 2
+    if failed_n or ok is False:
+        return 1
+    return 0
+
+
 def _print_status(data: dict) -> None:
     q = data.get("queue", {})
     workers = q.get("workers", {})
@@ -225,8 +249,17 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("stop", help="stop the daemon")
 
     p = sub.add_parser("serve", help="read-only web dashboard (localhost by default)")
-    p.add_argument("--bind", default="127.0.0.1:8787", help="HOST:PORT to bind (default 127.0.0.1:8787)")
+    p.add_argument("--bind", default="127.0.0.1:8081",
+                   help="HOST:PORT to bind; :PORT also accepted (default 127.0.0.1:8081)")
+    p.add_argument("--port", type=int, default=None,
+                   help="compatibility: port to bind on the loopback host")
     p.add_argument("--token", default="", help="required when binding a non-loopback address")
+
+    # FVC-R / self-proving local commands (constitution ch.8; offline, no daemon)
+    sub.add_parser("prove", help="run self-proving reverse tests and report")
+    p = sub.add_parser("capabilities", help="list built-in probe kinds, reason codes, control ids")
+    p.add_argument("--kind", choices=["probes", "reasons", "controls", "templates"], default="probes")
+    sub.add_parser("studio", help="launch AO Release Studio web console")
     return parser
 
 
@@ -239,6 +272,36 @@ def main(argv: Optional[list] = None) -> int:
     if not args.command:
         parser.print_help()
         return 2
+
+    # Offline local commands: no config file and no daemon required.
+    if args.command == "prove":
+        from .prove import reverse_tests
+        result = reverse_tests()
+        if args.json:
+            _print_json(result)
+        else:
+            for name, ok in result["checks"].items():
+                print(f"[{'OK' if ok else 'FAIL'}] {name}")
+            print(f"{'PASS' if result['all_ok'] else 'FAIL'} reverse tests")
+        return 0 if result["all_ok"] else 1
+
+    if args.command == "capabilities":
+        data = {
+            "probes": __import__("autonomic.observe", fromlist=["PROBE_KINDS"]).PROBE_KINDS,
+            "reasons": __import__("autonomic.ledger", fromlist=["REASON_CODES"]).REASON_CODES,
+            "controls": __import__("autonomic.sentinel", fromlist=["CONTROL_IDS"]).CONTROL_IDS,
+            "templates": sorted(__import__("autonomic.converge", fromlist=["TEMPLATES"]).TEMPLATES),
+        }[args.kind]
+        if args.json:
+            _print_json({"kind": args.kind, "items": list(data)})
+        else:
+            for item in data:
+                print(item)
+        return 0
+
+    if args.command == "studio":
+        from studio.app import main as studio_main
+        return studio_main()
 
     config_path = _find_config(args.config)
     try:
@@ -286,7 +349,7 @@ def main(argv: Optional[list] = None) -> int:
 
     if args.command == "serve":
         from .dashboard import serve
-        return serve(config, args.bind, args.token)
+        return serve(config, args.bind, args.token, port=args.port)
 
     client = IPCClient(config, timeout=args.timeout)
     try:
@@ -379,8 +442,16 @@ def _run_remote_command(client: IPCClient, args, config) -> int:
         return 0
 
     if cmd == "rollback":
-        _print_json(client.call("rollback", {"snapshot": args.snapshot}, timeout=60))
-        return 0
+        if not args.snapshot:
+            _print_json({"ok": False, "exit_code": 3, "error": "snapshot id is required"})
+            return 3
+        result = client.call("rollback", {"snapshot": args.snapshot}, timeout=60)
+        code = result_exit_code(result)
+        if isinstance(result, dict):
+            result["exit_code"] = code
+            result.setdefault("failed", [])
+        _print_json(result)
+        return code
 
     if cmd == "snapshots":
         _print_json(client.call("snapshots", {"limit": args.limit}))

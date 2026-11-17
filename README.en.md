@@ -69,7 +69,7 @@ bash tests/selftest.sh
 ### Read-only dashboard
 
 ```bash
-/opt/autonomic-ops/bin/autonomic-ops serve --port 8081 --bind 127.0.0.1
+/opt/autonomic-ops/bin/autonomic-ops serve --bind 127.0.0.1:8081
 ```
 
 Open `http://127.0.0.1:8081/` for status, metrics, bans, tasks, pending approvals, and the audit tail; `/metrics` exposes Prometheus-format metrics. The dashboard only reads state — it offers no write path.

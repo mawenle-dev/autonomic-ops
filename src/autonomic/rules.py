@@ -260,8 +260,15 @@ class RuleEngine:
         return len(self.rules)
 
     def stats(self) -> dict:
+        # F-12: distinguish the fixed built-in baseline from plugin-added rules.
+        # total = baseline + plugin rules; assert the DELTA, never an absolute.
+        baseline = sum(1 for r in self.rules if not r.source_file.startswith("runtime:"))
+        total = len(self.rules)
         return {
-            "count": len(self.rules),
+            "count": total,
+            "baseline_rule_count": baseline,
+            "total_rule_count": total,
+            "plugin_rule_count": total - baseline,
             "enabled": sum(1 for r in self.rules if r.enabled),
             "evaluated": self.evaluated,
             "proposed": self.proposed,

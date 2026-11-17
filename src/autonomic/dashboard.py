@@ -283,18 +283,54 @@ def _loopback(host: str) -> bool:
     return host in ("127.0.0.1", "localhost", "::1", "")
 
 
-def serve(config, bind: str = "127.0.0.1:8787", token: str = "",
-          logger: Optional[logging.Logger] = None) -> int:
-    host, sep, port_s = bind.rpartition(":")
-    if not sep:
-        host, port_s = "127.0.0.1", bind
+BIND_EXAMPLES = (
+    "examples: --bind 127.0.0.1:8081 | --bind :8081 | --port 8081"
+)
+
+
+def parse_bind(bind: str = "", port: Optional[int] = None,
+               default_host: str = "127.0.0.1", default_port: int = 8081) -> tuple[str, int]:
+    """Parse --bind HOST:PORT with :PORT / HOST shorthands (F-05, E1-E5).
+
+    A bare ``HOST`` (no port) is rejected with a clear error: historically a
+    pure IP was mis-parsed as a port number. Default binding is loopback only.
+    """
+    raw = str(bind or "").strip()
+    if port is not None:
+        # --port is compatibility syntax: always 0.0.0.0? No: keep loopback
+        # default host unless --bind supplied a host.
+        host = default_host
+        if raw and ":" in raw:
+            host, _, _ = raw.rpartition(":")
+        return host, int(port)
+    if not raw:
+        return default_host, default_port
+    if ":" in raw:
+        host, _, port_s = raw.rpartition(":")
+        host = host or default_host
+        try:
+            p = int(port_s)
+        except ValueError:
+            raise ValueError("invalid --bind %r; port must be numeric. %s" % (raw, BIND_EXAMPLES))
+        if not (1 <= p <= 65535):
+            raise ValueError("invalid --bind %r; port out of range. %s" % (raw, BIND_EXAMPLES))
+        return host, p
+    # No colon: could be a bare port or a bare host. A bare host is ambiguous,
+    # so accept pure digits as a port and reject anything else (E4).
+    if raw.isdigit():
+        return default_host, int(raw)
+    raise ValueError("invalid --bind %r; expected HOST:PORT. %s" % (raw, BIND_EXAMPLES))
+
+
+def serve(config, bind: str = "127.0.0.1:8081", token: str = "",
+          logger: Optional[logging.Logger] = None, port: Optional[int] = None) -> int:
     try:
-        port = int(port_s)
-    except ValueError:
-        raise SystemExit("invalid --bind %r; expected HOST:PORT (e.g. 127.0.0.1:8787)" % bind)
+        host, port = parse_bind(bind, port=port)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
     if not _loopback(host) and not token:
         raise SystemExit("refusing to bind non-loopback %r without --token; "
-                         "e.g. --bind 0.0.0.0:8787 --token <secret>" % host)
+                         "e.g. --bind 0.0.0.0:8081 --token <secret>" % host)
 
     client = IPCClient(config, timeout=8)
     log = logger or logging.getLogger("autonomic.dashboard")

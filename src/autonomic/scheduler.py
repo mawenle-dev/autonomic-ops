@@ -165,17 +165,43 @@ class Scheduler:
         task.cpu_seconds = int(max(1, min(3600, task.cpu_seconds or self.default_cpu)))
         task.memory_mb = int(max(16, min(8192, task.memory_mb or self.default_mem)))
         task.max_attempts = int(max(1, min(10, task.max_attempts)))
+        # F-02: shell tasks used a fixed title ("shell task"), hiding the real
+        # command in the UI. Derive a content summary so different commands are
+        # distinguishable to a human (dedupe itself uses the fact fingerprint).
+        cmd = task.payload.get("command")
+        if task.kind == TaskKind.SHELL.value and cmd and task.title in ("", "shell task"):
+            summary = util.normalize_command(str(cmd))
+            task.title = (summary[:40] + "…") if len(summary) > 40 else (summary or "shell task")
         if task.state in TERMINAL:
             task.state = TaskState.QUEUED.value
 
+    @staticmethod
+    def _dedupe_key(task: Task) -> str:
+        """F-02: dedupe on a fact fingerprint, not on (kind + fixed title).
+
+        Shell tasks used a constant default title, so every shell task collided.
+        The identity now comes from the normalized command stored in the payload.
+        Explicit ``dedupe_key`` still wins for callers that need a custom key.
+        """
+        explicit = task.payload.get("dedupe_key")
+        if explicit:
+            return f"explicit:{explicit}"
+        identity = task.payload.get("command")
+        if identity is None:
+            identity = task.payload.get("argv")
+        if identity is None:
+            identity = task.title
+        if isinstance(identity, (list, tuple)):
+            identity = " ".join(str(x) for x in identity)
+        return util.fact_fingerprint(task.kind, str(identity))
+
     def _find_duplicate(self, task: Task) -> Optional[Task]:
-        key = task.payload.get("dedupe_key") or f"{task.kind}:{task.title}"
+        key = self._dedupe_key(task)
         now = util.now()
         for existing in list(self.waiting) + list(self.running.values()):
             if existing.id == task.id:
                 continue
-            other = existing.payload.get("dedupe_key") or f"{existing.kind}:{existing.title}"
-            if other == key and now - existing.created_at <= self.dedupe_window:
+            if self._dedupe_key(existing) == key and now - existing.created_at <= self.dedupe_window:
                 return existing
         return None
 

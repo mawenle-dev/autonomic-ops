@@ -342,6 +342,30 @@ def chunked(iterable: Iterable, size: int) -> Iterator[list]:
         yield buf
 
 
+def normalize_command(command: str) -> str:
+    """Canonicalize a shell command for identity comparison (constitution F-02).
+
+    This is for *identity*, never for execution: fold whitespace, unify quote
+    characters, sort tokens so argument order is irrelevant, and drop volatile
+    temp paths. It must be deterministic and side-effect free.
+    """
+    s = str(command or "").strip()
+    s = s.replace("'", '"')
+    tokens = s.split()
+    tokens = [t for t in tokens if not re.match(r"^(/tmp|/var/tmp)/ao[_-]", t)]
+    tokens.sort()
+    return " ".join(tokens)
+
+
+def fact_fingerprint(kind: str, identity: str) -> str:
+    """Stable 16-hex fingerprint for dedupe/idempotency (F-02).
+
+    H(kind + '|' + normalized(identity)). Pass the command for shell tasks.
+    """
+    canon = f"{kind}|{normalize_command(identity)}"
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:16]
+
+
 def cpu_count() -> int:
     try:
         return len(os.sched_getaffinity(0))

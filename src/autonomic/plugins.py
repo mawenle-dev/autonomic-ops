@@ -359,6 +359,8 @@ class PluginManager:
         if self.rules is None:
             return None
         try:
+            # add_runtime_rule() prefixes with "runtime:" itself, so pass the
+            # bare plugin source. Result: runtime:plugin:<name>.
             rule_id = self.rules.add_runtime_rule(rule, source=f"plugin:{plugin}")
             if rule_id:
                 self._runtime_rules[rule_id] = plugin
@@ -485,6 +487,12 @@ class PluginManager:
         if self._watch_thread and self._watch_thread.is_alive():
             return
         self._stop.clear()
+        # F-11: do one scan immediately at startup so a plugin dropped just
+        # before/while the watcher starts is not missed for a whole interval.
+        try:
+            self.scan(notify=False)
+        except Exception as exc:  # noqa: BLE001
+            self._log.error("initial plugin scan failed: %s", exc)
         self._watch_thread = threading.Thread(target=self._watch_loop, name="plugin-watcher", daemon=True)
         self._watch_thread.start()
 

@@ -41,5 +41,14 @@ Thumbs.db
 # Local throwaway test VM (QEMU program + disk image + cloud-init seed) - never commit
 .vm/
 
+# Temporary generator scripts (regenerable, not part of the shipped project)
+.tmp/
+
+# Portable package: NEVER committed. The EXE and bundle are build outputs,
+# not source - they are distributed via releases/manual copy, not git.
+release/portable/
+release/dist/
+!release/dist/.keep
+
 # Personal release notes / launch checklist - not part of the shipped project
 launch-kit/

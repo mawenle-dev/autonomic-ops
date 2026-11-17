@@ -436,22 +436,58 @@ def _h_process_restart(req: ActionRequest, ctx: ExecContext) -> ActionResult:
 
 
 def _collect_cleanup_candidates(ctx: ExecContext, roots: list[str], min_age_hours: int,
-                                max_files: int) -> tuple[list[dict], int]:
+                                max_files: int, cross_device: bool = False) -> tuple[list[dict], int, int]:
+    """Collect cleanup candidates with physical directory identity dedupe (F-07).
+
+    Returns (candidates, scanned, skipped_duplicate). A directory is identified
+    by (realpath, st_dev, st_ino); the same physical directory reached through
+    multiple mount points is scanned once. Descent does not cross a filesystem
+    boundary unless the covenant explicitly allows cross_device.
+    """
     cutoff = util.now() - min_age_hours * 3600
     candidates: list[dict] = []
     scanned = 0
+    skipped_duplicate = 0
+    seen_dirs: set[tuple] = set()
     for root in roots:
         if not ctx.policy.in_cleanup_scope(root):
             ctx.log.warning("cleanup root rejected (outside policy.cleanup_paths): %s", root)
             continue
         if not os.path.isdir(root):
             continue
+        root_real = os.path.realpath(root)
+        try:
+            root_dev = os.stat(root_real).st_dev
+        except OSError:
+            continue
         for base, dirs, names in os.walk(root):
             # never follow symlinked directories
             dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(base, d))]
+            # physical identity dedupe for this directory
+            real = os.path.realpath(base)
+            try:
+                dst = os.stat(real)
+                ident = (real, dst.st_dev, dst.st_ino)
+            except OSError:
+                continue
+            if ident in seen_dirs:
+                skipped_duplicate += 1
+                dirs[:] = []
+                continue
+            seen_dirs.add(ident)
+            # do not descend into a different filesystem unless allowed
+            if not cross_device:
+                kept = []
+                for d in dirs:
+                    try:
+                        if os.stat(os.path.realpath(os.path.join(base, d))).st_dev == root_dev:
+                            kept.append(d)
+                    except OSError:
+                        continue
+                dirs[:] = kept
             for name in names:
                 if len(candidates) >= max_files:
-                    return candidates, scanned
+                    return candidates, scanned, skipped_duplicate
                 path = os.path.join(base, name)
                 scanned += 1
                 try:
@@ -462,8 +498,9 @@ def _collect_cleanup_candidates(ctx: ExecContext, roots: list[str], min_age_hour
                     continue
                 if st.st_mtime > cutoff or st.st_size <= 0:
                     continue
-                candidates.append({"path": path, "size": st.st_size, "mtime": st.st_mtime})
-    return candidates, scanned
+                candidates.append({"path": path, "size": st.st_size, "mtime": st.st_mtime,
+                                   "skipped_duplicate": False})
+    return candidates, scanned, skipped_duplicate
 
 
 def _do_cleanup(req: ActionRequest, ctx: ExecContext, roots: Optional[list[str]] = None,
@@ -474,7 +511,9 @@ def _do_cleanup(req: ActionRequest, ctx: ExecContext, roots: Optional[list[str]]
     max_bytes = util.parse_int(req.params.get("max_bytes"), int(ctx.config.get("policy.cleanup_max_bytes", 2 * 1024 ** 3)),
                                1, 50 * 1024 ** 3)
 
-    candidates, scanned = _collect_cleanup_candidates(ctx, cfg_roots, min_age, max_files)
+    cross_device = bool(req.params.get("cross_device", ctx.config.get("policy.cleanup_cross_device", False)))
+    candidates, scanned, skipped_duplicate = _collect_cleanup_candidates(
+        ctx, cfg_roots, min_age, max_files, cross_device=cross_device)
     selected: list[dict] = []
     total = 0
     for item in candidates:
@@ -514,14 +553,28 @@ def _do_cleanup(req: ActionRequest, ctx: ExecContext, roots: Optional[list[str]]
     undo_kind = snap.get("undo", {}).get("kind", "rename")
     # Only a truly restorable snapshot may be advertised as a rollback point.
     rollback = snap["id"] if snap.get("restorable") else None
+    # F-08: one canonical stats object, rendered into both the human detail
+    # and the structured output so CLI / receipt / panel cannot diverge.
+    stats = {
+        "matched": {"files": len(selected), "bytes": total},
+        "moved": {"files": len(removed), "bytes": snap.get("total_bytes", 0)},
+        "failed": {"files": len(failed), "bytes": 0},
+        "skipped_duplicate": skipped_duplicate,
+        "quarantine": snap["id"],
+        "undo_kind": undo_kind,
+        "restorable": snap.get("restorable"),
+    }
     return ActionResult(
         True, req.action,
-        detail=f"matched {len(selected)} files ({util.human_bytes(total)}), moved {len(removed)} "
-               f"({util.human_bytes(snap.get('total_bytes', 0))}), failed {len(failed)}; "
-               f"quarantine={snap['id']} undo={undo_kind} restorable={snap.get('restorable')}",
+        detail=f"matched {stats['matched']['files']} files ({util.human_bytes(total)}), "
+               f"moved {stats['moved']['files']} ({util.human_bytes(stats['moved']['bytes'])}), "
+               f"failed {stats['failed']['files']}; quarantine={snap['id']} "
+               f"undo={undo_kind} restorable={snap.get('restorable')} "
+               f"skipped_duplicate={skipped_duplicate}",
         changed_files=removed[:80],
         rollback_point=rollback,
         verified=len(failed) == 0,
+        output=util.json_dumps({"cleanup_stats": stats}),
     )
 
 

@@ -3,6 +3,35 @@
 本文件记录项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 自 1.0.1 起按《施工宪法》逐版施工：一版一件事，先有失败测试再实现，未发布版本标注状态，闸门键在发布时才开启。
 
+## [施工进度] - 2026-11-17（本地实现，未发布）
+
+按《施工宪法》一次性交付 120 版对应的完整功能（版本仅作发布编号，全部能力在此一并实现并自测）。以下为本地真实完成的模块，均附自动化测试；`release/versions.yaml` 列全 120 版，`release/release.yaml` 闸门全部保持 `false`（未发布不开闸）。
+
+### Added — 架构与模块（宪法 ch.4/6/7）
+- `fvc.py`：FVC-R 四元模型（Fact/Verdict/Covenant/Receipt）、判据半衰期（T½=base×confidence×freshness）、五维预算原子扣减、回执六要素强制校验。
+- `ledger.py`：反账（9 类 reason_code）、每日锚定、签名导出/离线验签、时点回放；复用既有审计哈希链。
+- `choreo.py`：DAG 环检测/拓扑序、冻结+checkpoint 续跑、审批 SLA、命名并发锁、嵌套深度限制、amend 保留历史。
+- `dispatch.py`：判据指纹、因果抑制、维护静默窗、事件合并、注意力预算、送达三态、静态状态页导出。
+- `sentinel.py`：五级处置+自动解除、攻击叙事 7 字段、防自锁（回环/内网永不封）、完整性基线、rootkit 特征、30 条合规控制与分数曲线。
+- `converge.py`：声明资源、check/shadow/apply 三模式、漂移判据（不动手）、自愈预算、三系包快照、20 个内置模板。
+- `reliquary.py`：签名内容包（tar.gz+manifest+signature）、未签名拒收、离线安装失败回滚、锁文件、60s 一次性能力券。
+- `counsel.py`：默认关闭的只读顾问、证据包（只存摘要）、7 只读工具、schema 校验、提案制、可回放 trace；**无执行句柄**。
+- `prove.py`：nonce、六演练、样本覆盖、基准、覆盖率门禁、反向测试。
+- `observe.py`：12 采集器基础、26 类探针、业务断言短路、监控插件文本协议解析。
+- `two_keys.py`：双钥生成/托管/双签、离线恢复码、三人恢复；不可逆动作强制双签。
+- `studio/`：AO Release Studio——本地 Web 控制台（不依赖 tkinter）、120 版清单、当前/上一版/本次版本管理、预检门禁（代码强制禁用发布按钮）、一键发布+回执、撤回、实时日志；PyInstaller 打包为 `AO-Release-Studio.exe` + Data + MANIFEST 自证（便携包全相对路径）。
+- CLI 新增离线命令：`autonomic-ops prove`、`autonomic-ops capabilities --kind ...`、`autonomic-ops studio`。
+
+### Fixed — 信用链（F-01~F-08 已修，测试佐证）
+- F-01/F-02：删除改为入仓+快照三态（1.0.1/1.0.2）；去重改事实指纹（1.0.3）。
+- F-04/F-05：撤销按结果返回退出码（0/2/1/3）；`--bind HOST:PORT` 三写法兼容、默认只监听本地。
+- F-07/F-08：清理按物理目录身份去重、不跨设备；matched/moved/failed 三口径单一数据源。
+
+### 验证（本地真实输出，2026-11-17）
+- 全量单测 **110 项 OK**（1 项因本机无 symlink 权限跳过，已标注）；`compileall -q src` 通过。
+- 便携包真实构建：`AO-Studio-portable-v1.0.0/`，EXE 8.8MB，81 文件，MANIFEST 校验 `ok`、零篡改，包内 `versions.yaml` 含 120 版。
+- `autonomic-ops prove` 三条反向测试 PASS；`capabilities` 列出 26 探针 / 30 控制。
+
 ## [1.0.2] - 施工中（未发布，闸门 `fix_snapshot_state` 未开启）
 
 承接 1.0.1，把快照三态在读侧"四处一致"接线补齐（A2/A3）。

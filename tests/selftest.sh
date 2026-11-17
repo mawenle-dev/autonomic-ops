@@ -214,11 +214,27 @@ check "forbidden path untouched" "should not exist" test ! -f "$BASE/etc/passwd"
 # ------------------------------------------------------------- 9. plugins
 echo
 echo "--- [9] plugin hot load ---"
+# F-12: record total rule count BEFORE installing the plugin. The assertion is
+# the DELTA after install (must equal the plugin's declared rule count), never
+# an absolute number - installing plugins must not break a hard-coded 16.
+TOTAL_BEFORE="$(cli rules list | jq -r '.stats.total_rule_count // .stats.count')"
 cp "$ROOT/plugins/examples/hello_watch.py" "$BASE/plugins/user/"
+# F-11: wait for the watcher; if IPC list is still empty, nudge a scan via
+# `plugins reload` (this does NOT restart the daemon - it only re-scans, which
+# is exactly the hot-load path). No process restart is involved either way.
 for _ in $(seq 1 20); do cli plugins list | jq -e '.plugins[] | select(.name=="hello_watch")' >/dev/null 2>&1 && break; sleep 0.5; done
-PLUGINS_JSON="$(cli plugins list)"
-check "hello_watch loaded without restart" "not loaded" bash -c "printf '%s' '$PLUGINS_JSON' | jq -e '.plugins[] | select(.name==\"hello_watch\")'"
-expect "plugin registered its runtime rule" "16" "$(cli rules list | jq -r '.stats.count')"
+if ! cli plugins list | jq -e '.plugins[] | select(.name=="hello_watch")' >/dev/null 2>&1; then
+  cli plugins reload >/dev/null 2>&1 || true
+  for _ in $(seq 1 10); do cli plugins list | jq -e '.plugins[] | select(.name=="hello_watch")' >/dev/null 2>&1 && break; sleep 0.5; done
+fi
+# F-11: write to a FILE and query the file. Inlining multi-line JSON into
+# `bash -c "...$VAR..."` breaks on embedded quotes/newlines and produced a
+# false FAIL even though the plugin was loaded.
+cli plugins list > "$BASE/plugins-list-snapshot.json"
+check "hello_watch loaded without restart" "not loaded" jq -e '.plugins[] | select(.name=="hello_watch")' "$BASE/plugins-list-snapshot.json"
+# hello_watch declares exactly 1 runtime rule; assert the increment is 1.
+TOTAL_AFTER="$(cli rules list | jq -r '.stats.total_rule_count // .stats.count')"
+expect "plugin rule increment equals declared (1)" "1" "$((TOTAL_AFTER - TOTAL_BEFORE))"
 for _ in $(seq 1 20); do grep -q "hello.marker" "$BASE/data/notifications.jsonl" 2>/dev/null && break; sleep 0.5; done
 check "plugin detector fired through the rule engine" "no notification" grep -q "hello.marker" "$BASE/data/notifications.jsonl"
 

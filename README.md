@@ -71,7 +71,7 @@ bash tests/selftest.sh                               # 50 项端到端断言
 ### 只读面板
 
 ```bash
-/opt/autonomic-ops/bin/autonomic-ops serve --port 8081 --bind 127.0.0.1
+/opt/autonomic-ops/bin/autonomic-ops serve --bind 127.0.0.1:8081
 ```
 
 浏览器打开 `http://127.0.0.1:8081/` 查看状态、指标、封禁、任务、待审批与审计尾；`/metrics` 暴露 Prometheus 格式指标。面板只读取数据，不提供任何写操作。
