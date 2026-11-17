@@ -1,6 +1,40 @@
 # Changelog
 
 本文件记录项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
+自 1.0.1 起按《施工宪法》逐版施工：一版一件事，先有失败测试再实现，未发布版本标注状态，闸门键在发布时才开启。
+
+## [1.0.2] - 施工中（未发布，闸门 `fix_snapshot_state` 未开启）
+
+承接 1.0.1，把快照三态在读侧"四处一致"接线补齐（A2/A3）。
+
+### Fixed — T-1 时间仓
+- `list()` 递归纳入隔离区快照（`quarantine/<日期>/<id>/`），使 `trash` 态出现在快照列表中，不再"入仓后即从列表消失"。
+- 快照列表统一透出 `kind` 与 `restorable`，与 manifest 同源，CLI / 账本 / 快照列表不再各自重算口径。
+- 账本记录：`meta` 快照携带 `restorable=false` 且不写 `rollback_point`（同一真值源 `manifest.restorable`）。
+
+### 验证（本地真实输出，2026-11-17）
+- `tests/test_f01_state_consistency.py` 3 项：实现前 2 errors（`list` 漏 trash 快照），实现后 3/3 `OK`。
+- A2：三类快照在 `list()` 中 `kind/restorable` 一致；A3：`meta` 无 `rollback_point` 且 `restore()` 明确拒绝。
+- 全量单测 34/34 `OK`，无基线回归。
+
+## [1.0.1] - 施工中（未发布，闸门 `fix_quarantine` 未开启）
+
+信用链第一环 / 缺陷 F-01：删除操作此前只留"仅元数据"快照却登记为可回滚点，撤销永远失败却对外宣称可撤销。
+
+### Fixed — T-1 时间仓
+- 删除语义改为**入仓**：文件整体 `rename` 到 `vault/quarantine/<日期>/<快照id>/`，原路径消失、字节完整保留；撤销为反向 `rename`，天然字节精确。
+- 快照引入三态 `full / trash / meta`，新增 `restorable` 字段并作为唯一真值源；`snapshot()` 可按 `kind` 显式构造。
+- `meta` 快照明确 `restorable=false`，`restore()` 直接拒绝并给出明确错误，不再尝试读取未保留的内容；`meta` 不写入 `rollback_point`。
+- 跨文件系统 `rename` 失败时降级为 `copy2 + unlink`，回执标注 `undo.kind=copy` 与字节成本。
+- 清理执行器 `_do_cleanup` 改用 `quarantine()`；入仓不可用时**拒绝删除**（没有撤销句柄就不动手），不再"先删再说"。
+- `list()` 透出 `kind` 与 `restorable`，使 CLI / 面板 / 账本口径一致的数据源就位。
+
+### 验证（本地真实输出，2026-11-17）
+- `tests/test_f01_quarantine.py` 4 项：实现前 1 error + 2 fail（`quarantine` 不存在、三态字段缺失），实现后 4/4 `OK`。
+- A1：5 个文件入仓→撤销→sha256 逐一相等（真实断言通过）。
+- A2/A3：`meta` 快照 `restorable=false` 且不产生 `rollback_point`。
+- 全量单测 31/31 `OK`（原 27 项基线无回归）；`compileall -q src` 通过。
+- 端到端 `tests/selftest.sh` 第 7 段（真实 daemon + socket + `touch -d`）需 Linux，本机 Windows 无法运行，故未声称其通过——以 Python 单测覆盖同一字节精确语义。
 
 ## [1.0.0] - 2026-11-07
 

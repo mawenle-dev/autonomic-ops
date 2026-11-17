@@ -493,36 +493,34 @@ def _do_cleanup(req: ActionRequest, ctx: ExecContext, roots: Optional[list[str]]
                             detail=f"DRY-RUN: would remove {len(selected)} files ({util.human_bytes(total)}). "
                                    f"First: {preview}", skipped=True, verified=False)
 
-    # Disk/cache cleanup exists to free space, often precisely when the disk is
-    # already full -- so copying file contents into the backup store is both
-    # wasteful and frequently impossible. Take a metadata-only rollback record
-    # (no payload copied) and then unlink the files directly. Deletion must not
-    # depend on the snapshot copy succeeding.
-    snap = {"id": "none", "complete": False}
+    # 1.0.1 / F-01: deletion is now "put in the bin" (quarantine). Files are
+    # renamed into the vault with their bytes intact, so the undo handle is
+    # real and byte-exact. Previously a metadata-only snapshot was registered
+    # as a rollback_point even though its payload was discarded -- undo always
+    # failed while the UI claimed restorable. On EXDEV we degrade to copy+unlink
+    # and the manifest records undo.kind=copy with the byte cost.
     try:
-        snap = ctx.backup.snapshot([c["path"] for c in selected], label=label,
-                                   meta={"request_id": req.id, "reason": req.reason},
-                                   metadata_only=True, remove_originals=False)
-    except Exception as exc:  # noqa: BLE001 - best effort; deletion proceeds regardless
-        ctx.log.warning("cleanup snapshot failed, continuing with deletion: %s", exc)
+        snap = ctx.backup.quarantine(
+            [c["path"] for c in selected], label=label,
+            meta={"request_id": req.id, "reason": req.reason},
+        )
+    except Exception as exc:  # noqa: BLE001 - refuse to delete without an undo handle
+        ctx.log.error("quarantine failed; refusing to delete without an undo handle: %s", exc)
+        return ActionResult(False, req.action,
+                            detail=f"aborted: quarantine unavailable ({exc})", verified=False)
 
-    removed = []
-    failed = []
-    for item in selected:
-        try:
-            if os.path.exists(item["path"]):
-                os.unlink(item["path"])
-            removed.append(item["path"])
-        except OSError as exc:
-            failed.append(item["path"])
-            ctx.log.warning("cleanup failed to remove %s: %s", item["path"], exc)
-
+    removed = [f["path"] for f in snap.get("files", []) if f.get("existed") and not f.get("skipped")]
+    failed = [f["path"] for f in snap.get("files", []) if f.get("skipped")]
+    undo_kind = snap.get("undo", {}).get("kind", "rename")
+    # Only a truly restorable snapshot may be advertised as a rollback point.
+    rollback = snap["id"] if snap.get("restorable") else None
     return ActionResult(
         True, req.action,
-        detail=f"removed {len(removed)} files ({util.human_bytes(total)}) from {cfg_roots}; "
-               f"snapshot={snap['id']} complete={snap['complete']} failed={len(failed)}",
+        detail=f"matched {len(selected)} files ({util.human_bytes(total)}), moved {len(removed)} "
+               f"({util.human_bytes(snap.get('total_bytes', 0))}), failed {len(failed)}; "
+               f"quarantine={snap['id']} undo={undo_kind} restorable={snap.get('restorable')}",
         changed_files=removed[:80],
-        rollback_point=snap["id"],
+        rollback_point=rollback,
         verified=len(failed) == 0,
     )
 

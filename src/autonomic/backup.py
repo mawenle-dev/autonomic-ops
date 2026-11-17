@@ -40,18 +40,35 @@ class BackupManager:
 
     # ------------------------------------------------------------- snapshot
     def snapshot(self, paths: Iterable[str], label: str = "manual", meta: Optional[dict] = None,
-                 remove_originals: bool = False, metadata_only: bool = False) -> dict:
+                 remove_originals: bool = False, metadata_only: bool = False,
+                 kind: Optional[str] = None) -> dict:
+        """Create a snapshot with an explicit three-state kind.
+
+        Kinds (constitution 4.2/7):
+          * ``full``  - payload copied, byte-exact restorable
+          * ``trash`` - originals renamed into the quarantine vault, restorable
+          * ``meta``  - evidence only, NOT restorable, never a rollback_point
+
+        ``kind`` is derived when not supplied: metadata_only -> meta, else full.
+        ``restorable`` is computed from kind and is the single source of truth.
+        """
         if not self.enabled:
             raise BackupError("backup is disabled in config; refusing to modify files without a rollback point")
         paths = [os.path.abspath(p) for p in paths if p]
         if not paths:
             raise BackupError("snapshot requires at least one path")
 
+        if kind is None:
+            kind = "meta" if metadata_only else "full"
+        if kind not in ("full", "trash", "meta"):
+            raise BackupError(f"unknown snapshot kind: {kind!r}")
+
         snap_id = util.new_id("s_")
         safe_label = "".join(c for c in label if c.isalnum() or c in "-_")[:32] or "snap"
         created = util.now()
         root = os.path.join(self.dir, f"{snap_id}_{safe_label}")
         files_dir = os.path.join(root, "files")
+        restorable = kind in ("full", "trash")
         manifest = {
             "id": snap_id,
             "label": label,
@@ -59,6 +76,8 @@ class BackupManager:
             "created_iso": util.iso(created),
             "host": util.local_ips()[0] if util.local_ips() else "localhost",
             "complete": True,
+            "kind": kind,
+            "restorable": restorable,
             "files": [],
             "meta": meta or {},
             "remove_originals": remove_originals,
@@ -215,6 +234,9 @@ class BackupManager:
     def _load_manifest(self, snapshot_id: str) -> tuple[dict, str]:
         pattern = os.path.join(self.dir, f"{snapshot_id}_*")
         matches = glob.glob(pattern) + glob.glob(os.path.join(self.dir, f"{snapshot_id}*"))
+        # quarantine snapshots live one level deeper: quarantine/<date>/<id>/
+        if not matches:
+            matches = glob.glob(os.path.join(self.dir, "quarantine", "*", f"{snapshot_id}*"))
         if not matches:
             raise BackupError(f"snapshot not found: {snapshot_id}")
         root = matches[0]
@@ -226,7 +248,12 @@ class BackupManager:
 
     def list(self, limit: int = 20) -> list[dict]:
         items = []
-        for manifest_path in glob.glob(os.path.join(self.dir, "*", "manifest.json")):
+        # Include both ordinary snapshots (dir/<id>_*/manifest.json) and
+        # quarantined ones (dir/quarantine/<date>/<id>/manifest.json) so the
+        # three-state view is consistent (constitution A2).
+        manifest_paths = glob.glob(os.path.join(self.dir, "*", "manifest.json"))
+        manifest_paths += glob.glob(os.path.join(self.dir, "quarantine", "*", "*", "manifest.json"))
+        for manifest_path in manifest_paths:
             try:
                 with open(manifest_path, "r", encoding="utf-8") as fh:
                     data = json.load(fh)
@@ -237,6 +264,8 @@ class BackupManager:
                     "files": len(data.get("files", [])),
                     "bytes": data.get("total_bytes"),
                     "complete": data.get("complete", True),
+                    "kind": data.get("kind", "full"),
+                    "restorable": data.get("restorable", data.get("kind", "full") in ("full", "trash")),
                     "label_meta": data.get("meta", {}),
                 })
             except (OSError, ValueError):
@@ -247,6 +276,13 @@ class BackupManager:
     # --------------------------------------------------------------- restore
     def restore(self, snapshot_id: str, only_paths: Optional[Iterable[str]] = None, actor: str = "user") -> dict:
         manifest, root = self._load_manifest(snapshot_id)
+        # A meta snapshot is evidence only. Refuse clearly; never attempt to
+        # read a payload that was intentionally not retained (F-01 / A2).
+        if manifest.get("kind") == "meta" or manifest.get("restorable") is False:
+            raise BackupError(
+                f"snapshot {snapshot_id} is {manifest.get('kind', 'meta')} (evidence only); "
+                "not restorable"
+            )
         wanted = {os.path.abspath(p) for p in only_paths} if only_paths else None
         targets = [f for f in manifest["files"] if not wanted or f["path"] in wanted]
         if not targets:
@@ -266,6 +302,30 @@ class BackupManager:
         for entry in targets:
             path = entry["path"]
             try:
+                # trash snapshots: the payload lives in the quarantine vault
+                # and the live path is gone. Reverse the rename/copy.
+                if manifest.get("kind") == "trash" and entry.get("restored_from"):
+                    src = entry["restored_from"]
+                    if not os.path.isabs(src):
+                        src = os.path.join(root, src)
+                    if not os.path.exists(src):
+                        failed.append({"path": path, "reason": "quarantine payload missing"})
+                        continue
+                    util.ensure_dir(os.path.dirname(path), 0o750)
+                    try:
+                        os.rename(src, path)  # reverse rename, byte-exact
+                    except OSError:
+                        shutil.copy2(src, path)  # cross-device quarantine
+                    try:
+                        os.chmod(path, entry.get("mode", 0o644))
+                    except OSError:
+                        pass
+                    actual = util.sha256_file(path)
+                    if entry.get("sha256") and actual != entry["sha256"]:
+                        failed.append({"path": path, "reason": f"post-restore hash mismatch {actual[:12]}"})
+                    else:
+                        restored.append(path)
+                    continue
                 if entry.get("type") == "absent":
                     if os.path.exists(path) and (wanted is None or path in wanted):
                         os.unlink(path)
@@ -320,6 +380,105 @@ class BackupManager:
         level = self._log.info if not failed else self._log.error
         level("rollback snapshot=%s restored=%d removed=%d failed=%d", snapshot_id, len(restored), len(removed), len(failed))
         return result
+
+    # ------------------------------------------------------------ quarantine
+    def quarantine(self, paths: Iterable[str], label: str = "cleanup",
+                   meta: Optional[dict] = None) -> dict:
+        """Move files into the quarantine vault (delete becomes "put in the bin").
+
+        The original path disappears and the exact bytes are retained under
+        ``vault/quarantine/<date>/<snap_id>/<basename>``; restore is a reverse
+        rename, so it is byte-exact by construction. If source and vault sit on
+        different filesystems, ``os.rename`` raises EXDEV and we degrade to
+        copy2 + unlink, recording ``undo.kind=copy`` with its byte cost.
+        """
+        if not self.enabled:
+            raise BackupError("backup is disabled; refusing to delete without a quarantine")
+        paths = [os.path.abspath(p) for p in paths if p]
+        if not paths:
+            raise BackupError("quarantine requires at least one path")
+
+        snap_id = util.new_id("s_")
+        safe_label = "".join(c for c in label if c.isalnum() or c in "-_")[:32] or "cleanup"
+        day = util.iso(util.now())[:10]
+        qroot = os.path.join(self.dir, "quarantine", day, snap_id)
+        util.ensure_dir(qroot, 0o700)
+        created = util.now()
+        manifest = {
+            "id": snap_id,
+            "label": label,
+            "created_at": created,
+            "created_iso": util.iso(created),
+            "host": util.local_ips()[0] if util.local_ips() else "localhost",
+            "complete": True,
+            "kind": "trash",
+            "restorable": True,
+            "files": [],
+            "meta": meta or {},
+            "remove_originals": True,
+            "undo": {"kind": "rename", "cost": 0},
+        }
+        total_bytes = 0
+        with self._lock:
+            for src in paths:
+                entry = {"path": src, "existed": os.path.exists(src), "skipped": False}
+                if not entry["existed"]:
+                    entry.update({"type": "absent", "size": 0, "sha256": "", "restored_from": None})
+                    manifest["files"].append(entry)
+                    continue
+                try:
+                    st = os.stat(src)
+                except OSError as exc:
+                    entry.update({"skipped": True, "note": f"stat failed: {exc}"})
+                    manifest["complete"] = False
+                    manifest["files"].append(entry)
+                    continue
+                if os.path.isdir(src):
+                    entry.update({"skipped": True, "note": "directory quarantine not supported; use per-file paths",
+                                  "type": "dir", "size": 0, "sha256": ""})
+                    manifest["complete"] = False
+                    manifest["files"].append(entry)
+                    continue
+                digest = util.sha256_file(src)
+                dest = os.path.join(qroot, os.path.basename(src))
+                # avoid collisions for same basename from different dirs
+                n = 1
+                while os.path.exists(dest):
+                    dest = os.path.join(qroot, f"{n}_{os.path.basename(src)}")
+                    n += 1
+                undo_kind = "rename"
+                try:
+                    os.rename(src, dest)  # same-filesystem: O(1), exact
+                except OSError as exc:
+                    # EXDEV or similar: degrade to copy + unlink, pay bytes.
+                    try:
+                        shutil.copy2(src, dest)
+                        os.unlink(src)
+                        undo_kind = "copy"
+                        manifest["undo"] = {"kind": "copy", "cost": st.st_size}
+                    except OSError as exc2:
+                        entry.update({"skipped": True, "note": f"quarantine failed: {exc} / {exc2}"})
+                        manifest["complete"] = False
+                        manifest["files"].append(entry)
+                        continue
+                total_bytes += st.st_size
+                entry.update({
+                    "type": "file",
+                    "size": st.st_size,
+                    "sha256": digest,
+                    "mode": st.st_mode & 0o777,
+                    "restored_from": dest,
+                    "copied": undo_kind == "copy",
+                })
+                manifest["files"].append(entry)
+
+        manifest["total_bytes"] = total_bytes
+        util.atomic_write(os.path.join(qroot, "manifest.json"), util.json_dumps(manifest, pretty=True), mode=0o600)
+        util.atomic_write(os.path.join(qroot, ".complete"), "ok\n", mode=0o600)
+        self._log.info("quarantine id=%s label=%s files=%d bytes=%s undo=%s",
+                       snap_id, label, len(manifest["files"]), util.human_bytes(total_bytes),
+                       manifest["undo"]["kind"])
+        return manifest
 
     # ---------------------------------------------------------------- prune
     def prune(self) -> int:

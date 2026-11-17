@@ -1,0 +1,724 @@
+# AutonomicOps version roadmap (120 versions)
+# Generated deterministically from the construction constitution, chapter 10.
+# This is the route list only. Implementing a capability requires its gate to be enabled in release.yaml.
+versions:
+  - version: "1.0.1"
+    gate: fix_quarantine
+    series: "A 修信用"
+    deliver: "删除改为入仓；快照 trash 态；跨设备降级为复制"
+    acceptance: "A1 撤销后 sha256 全等"
+    status: implemented_local
+  - version: "1.0.2"
+    gate: fix_snapshot_state
+    series: "A 修信用"
+    deliver: "快照三态(full/trash/meta)四处一致；restorable 透出"
+    acceptance: "A2/A3 三处一致，无假 rollback_point"
+    status: implemented_local
+  - version: "1.0.3"
+    gate: fix_dedupe
+    series: "A 修信用"
+    deliver: "事实指纹去重；标题取内容摘要；重复返回 suppressed_by"
+    acceptance: "B1-B4"
+    status: pending
+  - version: "1.0.4"
+    gate: fix_default_covenant
+    series: "A 修信用"
+    deliver: "默认契约补 notify/diagnostic；无通道即失败"
+    acceptance: "C1-C3"
+    status: pending
+  - version: "1.0.5"
+    gate: fix_exit_code
+    series: "A 修信用"
+    deliver: "统一结果→退出码映射(0/2/1/3)"
+    acceptance: "D1-D4"
+    status: pending
+  - version: "1.0.6"
+    gate: fix_bind
+    series: "A 修信用"
+    deliver: "--bind HOST:PORT 三写法兼容；默认只监听本地"
+    acceptance: "E1-E5"
+    status: pending
+  - version: "1.0.7"
+    gate: fix_selftest_gate
+    series: "A 修信用"
+    deliver: "端到端自测入门禁；nonce 注入"
+    acceptance: "F1-F2"
+    status: pending
+  - version: "1.0.8"
+    gate: fix_dir_identity
+    series: "A 修信用"
+    deliver: "目录身份去重(realpath+dev+ino)；不跨设备"
+    acceptance: "G1-G3"
+    status: pending
+  - version: "1.0.9"
+    gate: fix_stats
+    series: "A 修信用"
+    deliver: "三项统计(matched/moved/failed)；单一数据源"
+    acceptance: "H1-H2"
+    status: pending
+  - version: "1.0.10"
+    gate: fix_tasks_view
+    series: "A 修信用"
+    deliver: "tasks 默认最近 10 条终态"
+    acceptance: "I1-I2"
+    status: pending
+  - version: "1.0.11"
+    gate: fix_codegen
+    series: "A 修信用"
+    deliver: "生成器非法意图报错、别名表、产物校验"
+    acceptance: "J1-J3"
+    status: pending
+  - version: "1.0.12"
+    gate: fix_hotload
+    series: "A 修信用"
+    deliver: "插件热加载(原子替换+回退)；规则计数改增量口径"
+    acceptance: "K1-K3、L1-L3"
+    status: pending
+  - version: "1.0.13"
+    gate: repo_hygiene
+    series: "A 修信用"
+    deliver: "仓库净化：清 pyc、文档七件套、测试≥3000行、目录重整、archive 四命令"
+    acceptance: "M1-M3"
+    status: pending
+  - version: "1.0.14"
+    gate: portable_pkg
+    series: "A 修信用"
+    deliver: "便携包：EXE+Data、全相对路径、单实例锁、MANIFEST 自检、原生 UI"
+    acceptance: "A1-A6"
+    status: pending
+  - version: "1.0.15"
+    gate: memory_docs
+    series: "A 修信用"
+    deliver: "记忆文档体系：docs/human + docs/memory、日志链、INDEX 自动生成"
+    acceptance: "每个工作项两条记忆"
+    status: pending
+  - version: "1.0.16"
+    gate: state_env
+    series: "A 修信用"
+    deliver: "状态自证(从仓库推导)+账号空位与凭据隔离+四环境分离校验"
+    acceptance: "四态输出正确"
+    status: pending
+  - version: "1.0.17"
+    gate: seal_verify
+    series: "A 修信用"
+    deliver: "封存机制：seal build 证据包 → seal verify 只校验"
+    acceptance: "篡改即拒绝"
+    status: pending
+  - version: "1.1.0"
+    gate: receipt_core
+    series: "B 回执"
+    deliver: "回执六要素结构+落盘+receipts list/show"
+    acceptance: "六要素齐全"
+    status: pending
+  - version: "1.1.1"
+    gate: receipt_chain
+    series: "B 回执"
+    deliver: "回执照哈希链 prev_hash/hash；篡改定位到行"
+    acceptance: "改一条定位行号"
+    status: pending
+  - version: "1.1.2"
+    gate: undo_typed
+    series: "B 回执"
+    deliver: "撤销句柄类型化 trash/copy/snapshot/reverse_txn"
+    acceptance: "四类型可辨"
+    status: pending
+  - version: "1.1.3"
+    gate: undo_window
+    series: "B 回执"
+    deliver: "undo <receipt>；10 分钟免审批窗口"
+    acceptance: "窗口内外行为正确"
+    status: pending
+  - version: "1.1.4"
+    gate: two_keys
+    series: "B 回执"
+    deliver: "双钥体系生成/托管/双签校验；离线恢复码"
+    acceptance: "单钥不可执行"
+    status: pending
+  - version: "1.1.5"
+    gate: negative_ledger
+    series: "B 回执"
+    deliver: "反账骨架 9 类 reason_code + explain absence"
+    acceptance: "9 类全覆盖"
+    status: pending
+  - version: "1.1.6"
+    gate: ledger_daemon
+    series: "B 回执"
+    deliver: "账本独立进程只写不回读；kill -9 仍写完整"
+    acceptance: "kill -9 后完整"
+    status: pending
+  - version: "1.1.7"
+    gate: ledger_anchor
+    series: "B 回执"
+    deliver: "每日锚定 seq 区间+root hash+条数"
+    acceptance: "锚定可校验"
+    status: pending
+  - version: "1.1.8"
+    gate: ledger_bundle
+    series: "B 回执"
+    deliver: "ledger export --bundle + 离线验签脚本"
+    acceptance: "离线验签通过"
+    status: pending
+  - version: "1.1.9"
+    gate: ledger_replay
+    series: "B 回执"
+    deliver: "回放：给时点重建契约/对象状态/判据"
+    acceptance: "还原契约 hash"
+    status: pending
+  - version: "1.2.0"
+    gate: verdict_core
+    series: "C 判据"
+    deliver: "判据对象+七态状态机+verdicts list"
+    acceptance: "七态正确"
+    status: pending
+  - version: "1.2.1"
+    gate: verdict_chain
+    series: "C 判据"
+    deliver: "推理链记录每步 in/out hash；可复现"
+    acceptance: "同事实集同 hash"
+    status: pending
+  - version: "1.2.2"
+    gate: verdict_confidence
+    series: "C 判据"
+    deliver: "置信度公式(证据数×独立性×新鲜度)"
+    acceptance: "符合公式"
+    status: pending
+  - version: "1.2.3"
+    gate: verdict_half_life
+    series: "C 判据"
+    deliver: "半衰期计时器；可见度衰减"
+    acceptance: "按 T½ 衰减"
+    status: pending
+  - version: "1.2.4"
+    gate: verdict_retire
+    series: "C 判据"
+    deliver: "退场与复活；复发携带历史"
+    acceptance: "3 半衰期退场"
+    status: pending
+  - version: "1.2.5"
+    gate: verdict_baseline
+    series: "C 判据"
+    deliver: "分时段基线 P50/P95/σ；偏离+越界双条件"
+    acceptance: "双条件正确"
+    status: pending
+  - version: "1.2.6"
+    gate: parser_lab
+    series: "C 判据"
+    deliver: "解析器试验台命中/漏报/误报/预计触发"
+    acceptance: "四元组一致"
+    status: pending
+  - version: "1.2.7"
+    gate: decoders_20
+    series: "C 判据"
+    deliver: "首批 20 个解码器+样本"
+    acceptance: "20 全过样本"
+    status: pending
+  - version: "1.2.8"
+    gate: explain_cmd
+    series: "C 判据"
+    deliver: "explain 四命令 P95<200ms"
+    acceptance: "四命令可用"
+    status: pending
+  - version: "1.2.9"
+    gate: verdict_fingerprint
+    series: "C 判据"
+    deliver: "判据指纹与去重；同源合并"
+    acceptance: "同源合并正确"
+    status: pending
+  - version: "1.3.0"
+    gate: covenant_book
+    series: "D 契约"
+    deliver: "契约簿+签名+到期失效"
+    acceptance: "到期失效"
+    status: pending
+  - version: "1.3.1"
+    gate: budget_five
+    series: "D 契约"
+    deliver: "五维预算账户(字节/文件/次数/影响面/频率)"
+    acceptance: "五维必填"
+    status: pending
+  - version: "1.3.2"
+    gate: budget_debit
+    series: "D 契约"
+    deliver: "滑动窗原子扣减；扣不动即拒并写反账"
+    acceptance: "原子扣减准确"
+    status: pending
+  - version: "1.3.3"
+    gate: budget_escalate
+    series: "D 契约"
+    deliver: "超预算升级流：临时扩容契最短 1h"
+    acceptance: "升级流正确"
+    status: pending
+  - version: "1.3.4"
+    gate: covenant_strict
+    series: "D 契约"
+    deliver: "多契约冲突取严(预算取小、期限取短)"
+    acceptance: "取严正确"
+    status: pending
+  - version: "1.3.5"
+    gate: shadow_overlay
+    series: "D 契约"
+    deliver: "影子面 overlayfs 实现"
+    acceptance: "预测落库"
+    status: pending
+  - version: "1.3.6"
+    gate: shadow_fallback
+    series: "D 契约"
+    deliver: "影子面硬链接降级+静态估算兜底"
+    acceptance: "降级标置信度"
+    status: pending
+  - version: "1.3.7"
+    gate: shadow_diff
+    series: "D 契约"
+    deliver: "影响集对比与人类可读渲染"
+    acceptance: "渲染可读"
+    status: pending
+  - version: "1.3.8"
+    gate: shadow_calibrate
+    series: "D 契约"
+    deliver: "预测 vs 实际偏差记账；>20% 降预算"
+    acceptance: "偏差可观测"
+    status: pending
+  - version: "1.3.9"
+    gate: covenant_rotate
+    series: "D 契约"
+    deliver: "契约离线验签与密钥轮换"
+    acceptance: "验签与轮换可用"
+    status: pending
+  - version: "1.4.0"
+    gate: choreo_dag
+    series: "E 编排"
+    deliver: "DAG 加载与校验(环检测、拓扑序)"
+    acceptance: "环加载期报错"
+    status: pending
+  - version: "1.4.1"
+    gate: choreo_condition
+    series: "E 编排"
+    deliver: "步骤通过条件必须是判据(类型级强制)"
+    acceptance: "类型校验生效"
+    status: pending
+  - version: "1.4.2"
+    gate: choreo_freeze
+    series: "E 编排"
+    deliver: "冻结状态与现场保存"
+    acceptance: "冻结可续"
+    status: pending
+  - version: "1.4.3"
+    gate: choreo_resume
+    series: "E 编排"
+    deliver: "checkpoint 续跑(进程重启继续)"
+    acceptance: "kill -9 可续"
+    status: pending
+  - version: "1.4.4"
+    gate: choreo_sla
+    series: "E 编排"
+    deliver: "审批 SLA 超时按策略处置"
+    acceptance: "SLA 生效"
+    status: pending
+  - version: "1.4.5"
+    gate: choreo_lock
+    series: "E 编排"
+    deliver: "并发锁(同目标单实例+全局上限)"
+    acceptance: "并发被拦"
+    status: pending
+  - version: "1.4.6"
+    gate: choreo_depth
+    series: "E 编排"
+    deliver: "嵌套深度限制与防止递归触发"
+    acceptance: "超限被拒"
+    status: pending
+  - version: "1.4.7"
+    gate: choreo_amend
+    series: "E 编排"
+    deliver: "amend 改流程不改历史"
+    acceptance: "历史保留"
+    status: pending
+  - version: "1.4.8"
+    gate: choreo_ui
+    series: "E 编排"
+    deliver: "面板节点图+冻结节点高亮"
+    acceptance: "高亮正确"
+    status: pending
+  - version: "1.4.9"
+    gate: choreo_receipt
+    series: "E 编排"
+    deliver: "编排级汇总回执(含各步引用)"
+    acceptance: "汇总完整"
+    status: pending
+  - version: "1.5.0"
+    gate: dispatch_fingerprint
+    series: "F 通报"
+    deliver: "判据指纹+合并计数"
+    acceptance: "合并计数正确"
+    status: pending
+  - version: "1.5.1"
+    gate: dispatch_inhibit
+    series: "F 通报"
+    deliver: "因果抑制(对象树父子推导)"
+    acceptance: "父抑制子"
+    status: pending
+  - version: "1.5.2"
+    gate: dispatch_silence
+    series: "F 通报"
+    deliver: "静默与维护窗口(到期自动解除)"
+    acceptance: "窗口零通报"
+    status: pending
+  - version: "1.5.3"
+    gate: dispatch_incident
+    series: "F 通报"
+    deliver: "事件合并(时间窗同源)"
+    acceptance: "3 挂载点→1 事件"
+    status: pending
+  - version: "1.5.4"
+    gate: dispatch_escalate
+    series: "F 通报"
+    deliver: "升级策略(未确认逐级升级)"
+    acceptance: "未确认升级"
+    status: pending
+  - version: "1.5.5"
+    gate: dispatch_attention
+    series: "F 通报"
+    deliver: "注意力预算(每人每晚 K 次)"
+    acceptance: "超预算降摘要"
+    status: pending
+  - version: "1.5.6"
+    gate: dispatch_delivery
+    series: "F 通报"
+    deliver: "送达三态 delivered/read/acknowledged"
+    acceptance: "三态正确"
+    status: pending
+  - version: "1.5.7"
+    gate: dispatch_channels
+    series: "F 通报"
+    deliver: "原生 6 渠道"
+    acceptance: "六渠道可用"
+    status: pending
+  - version: "1.5.8"
+    gate: dispatch_dlq
+    series: "F 通报"
+    deliver: "死信与补发(失败重试、去重)"
+    acceptance: "不重复打扰"
+    status: pending
+  - version: "1.5.9"
+    gate: dispatch_statuspage
+    series: "F 通报"
+    deliver: "公共状态页静态导出(离线可开)"
+    acceptance: "离线可开"
+    status: pending
+  - version: "2.0.0"
+    gate: obs_core
+    series: "G 观测"
+    deliver: "采集框架+前 4 采集器(CPU/内存/磁盘/网络)"
+    acceptance: "四采集器可用"
+    status: pending
+  - version: "2.0.1"
+    gate: obs_batch2
+    series: "G 观测"
+    deliver: "采集器 5-8(进程树/容器/systemd/温度)"
+    acceptance: "可用"
+    status: pending
+  - version: "2.0.2"
+    gate: obs_batch3
+    series: "G 观测"
+    deliver: "采集器 9-12(RAID/GPU/证书/时钟)"
+    acceptance: "可用"
+    status: pending
+  - version: "2.0.3"
+    gate: tsdb_core
+    series: "G 观测"
+    deliver: "时序库写入与查询(分段+倒排标签)"
+    acceptance: "可写可查"
+    status: pending
+  - version: "2.0.4"
+    gate: tsdb_downsample
+    series: "G 观测"
+    deliver: "三级降采样(1m/5m/1h)与保留策略"
+    acceptance: "数据连续"
+    status: pending
+  - version: "2.0.5"
+    gate: tsdb_query
+    series: "G 观测"
+    deliver: "查询子集(选择器、聚合、范围向量)"
+    acceptance: "查询正确"
+    status: pending
+  - version: "2.0.6"
+    gate: probe_core
+    series: "G 观测"
+    deliver: "探针框架+前 6 类"
+    acceptance: "可超时重试"
+    status: pending
+  - version: "2.0.7"
+    gate: probe_batch2
+    series: "G 观测"
+    deliver: "探针 7-14"
+    acceptance: "可用"
+    status: pending
+  - version: "2.0.8"
+    gate: probe_batch3
+    series: "G 观测"
+    deliver: "探针 15-20"
+    acceptance: "可用"
+    status: pending
+  - version: "2.0.9"
+    gate: probe_batch4
+    series: "G 观测"
+    deliver: "探针 21-26"
+    acceptance: "可用"
+    status: pending
+  - version: "2.0.10"
+    gate: probe_nagios_bridge
+    series: "G 观测"
+    deliver: "监控插件文本协议桥"
+    acceptance: "解析 perfdata"
+    status: pending
+  - version: "2.0.11"
+    gate: ingest_remote
+    series: "G 观测"
+    deliver: "远端写入摄入+第三方 REST 摄入"
+    acceptance: "三源可摄入"
+    status: pending
+  - version: "2.0.12"
+    gate: dash_datasource
+    series: "G 观测"
+    deliver: "看板数据源+预置面板+/metrics"
+    acceptance: "指标文本可查"
+    status: pending
+  - version: "2.1.0"
+    gate: sentinel_engine
+    series: "H 守门"
+    deliver: "场景引擎(计数桶+漏桶多维分桶)"
+    acceptance: "慢速暴破命中"
+    status: pending
+  - version: "2.1.1"
+    gate: decoders_40
+    series: "H 守门"
+    deliver: "解码器扩到 40 个"
+    acceptance: "全过样本"
+    status: pending
+  - version: "2.1.2"
+    gate: decoders_60
+    series: "H 守门"
+    deliver: "解码器 60 个+全样本通过"
+    acceptance: "60 全过"
+    status: pending
+  - version: "2.1.3"
+    gate: sentinel_levels
+    series: "H 守门"
+    deliver: "五级处置+自动解除"
+    acceptance: "可切换自动解除"
+    status: pending
+  - version: "2.1.4"
+    gate: sentinel_story
+    series: "H 守门"
+    deliver: "攻击叙事 7 项字段"
+    acceptance: "字段完整"
+    status: pending
+  - version: "2.1.5"
+    gate: sentinel_intel
+    series: "H 守门"
+    deliver: "信誉库+离线签名情报包"
+    acceptance: "离线签名可用"
+    status: pending
+  - version: "2.1.6"
+    gate: sentinel_fim
+    series: "H 守门"
+    deliver: "完整性基线(监听+周期 hash+快照)"
+    acceptance: "变更可撤销"
+    status: pending
+  - version: "2.1.7"
+    gate: sentinel_rootkit
+    series: "H 守门"
+    deliver: "rootkit 特征"
+    acceptance: "合成样本命中"
+    status: pending
+  - version: "2.1.8"
+    gate: sentinel_compliance
+    series: "H 守门"
+    deliver: "合规 30 条→持续判据+分数曲线"
+    acceptance: "control id 完整"
+    status: pending
+  - version: "2.2.0"
+    gate: conv_core
+    series: "I 收敛"
+    deliver: "资源类型 file/dir；声明式解析"
+    acceptance: "解析正确"
+    status: pending
+  - version: "2.2.1"
+    gate: conv_check
+    series: "I 收敛"
+    deliver: "check 模式(只算 diff 零副作用)"
+    acceptance: "零副作用"
+    status: pending
+  - version: "2.2.2"
+    gate: conv_shadow
+    series: "I 收敛"
+    deliver: "shadow 模式(影子真跑)"
+    acceptance: "预测准确"
+    status: pending
+  - version: "2.2.3"
+    gate: conv_apply
+    series: "I 收敛"
+    deliver: "apply 模式(快照+执行+验证+回执)"
+    acceptance: "全流程正确"
+    status: pending
+  - version: "2.2.4"
+    gate: conv_drift
+    series: "I 收敛"
+    deliver: "漂移判据(周期比对不直接动手)"
+    acceptance: "1 周期发现"
+    status: pending
+  - version: "2.2.5"
+    gate: conv_budget
+    series: "I 收敛"
+    deliver: "自愈预算(每月 N 次)"
+    acceptance: "超限只报不修"
+    status: pending
+  - version: "2.2.6"
+    gate: conv_package
+    series: "I 收敛"
+    deliver: "包管理三系(deb/rpm/apk)+包快照"
+    acceptance: "三系适配"
+    status: pending
+  - version: "2.2.7"
+    gate: conv_templates
+    series: "I 收敛"
+    deliver: "20 个内置模板"
+    acceptance: "全部可加载"
+    status: pending
+  - version: "2.2.8"
+    gate: conv_rollback
+    series: "I 收敛"
+    deliver: "模板失败回滚与审计"
+    acceptance: "失败不落盘"
+    status: pending
+  - version: "2.3.0"
+    gate: counsel_endpoint
+    series: "J 顾问"
+    deliver: "本地端点接入(默认关闭仅本机)"
+    acceptance: "断网可用"
+    status: pending
+  - version: "2.3.1"
+    gate: counsel_evidence
+    series: "J 顾问"
+    deliver: "证据打包器"
+    acceptance: "不含原文"
+    status: pending
+  - version: "2.3.2"
+    gate: counsel_tools
+    series: "J 顾问"
+    deliver: "7 个只读工具"
+    acceptance: "工具只读"
+    status: pending
+  - version: "2.3.3"
+    gate: counsel_schema
+    series: "J 顾问"
+    deliver: "输出 schema 校验"
+    acceptance: "违规丢弃"
+    status: pending
+  - version: "2.3.4"
+    gate: counsel_proposal
+    series: "J 顾问"
+    deliver: "提案制+双签落地"
+    acceptance: "提案不自动执行"
+    status: pending
+  - version: "2.3.5"
+    gate: counsel_trace
+    series: "J 顾问"
+    deliver: "trace 回放"
+    acceptance: "可回放"
+    status: pending
+  - version: "2.4.0"
+    gate: reliquary_format
+    series: "K 器库"
+    deliver: "包格式+manifest 规范"
+    acceptance: "格式合规"
+    status: pending
+  - version: "2.4.1"
+    gate: reliquary_sign
+    series: "K 器库"
+    deliver: "签名与验签(默认拒收未签名)"
+    acceptance: "未签名拒收"
+    status: pending
+  - version: "2.4.2"
+    gate: reliquary_offline
+    series: "K 器库"
+    deliver: "离线安装+失败回滚"
+    acceptance: "离线装成功"
+    status: pending
+  - version: "2.4.3"
+    gate: reliquary_lock
+    series: "K 器库"
+    deliver: "锁文件(可复现整套环境)"
+    acceptance: "可复现"
+    status: pending
+  - version: "2.4.4"
+    gate: reliquary_source
+    series: "K 器库"
+    deliver: "私有源+气隙同步"
+    acceptance: "同步可用"
+    status: pending
+  - version: "2.4.5"
+    gate: reliquary_token
+    series: "K 器库"
+    deliver: "能力券(60s 一次性带范围)"
+    acceptance: "过期失效"
+    status: pending
+  - version: "2.5.0"
+    gate: prove_fixture
+    series: "L 自证"
+    deliver: "样本框架(规则/解码器/场景/编排)"
+    acceptance: "样本 100%"
+    status: pending
+  - version: "2.5.1"
+    gate: prove_drills
+    series: "L 自证"
+    deliver: "六演练脚本"
+    acceptance: "六演练全通"
+    status: pending
+  - version: "2.5.2"
+    gate: prove_bench
+    series: "L 自证"
+    deliver: "基准套件(五项)+历史曲线"
+    acceptance: "基准可查"
+    status: pending
+  - version: "2.5.3"
+    gate: prove_coverage
+    series: "L 自证"
+    deliver: "覆盖率门禁(核心≥75%)"
+    acceptance: "达标"
+    status: pending
+  - version: "2.5.4"
+    gate: prove_ci
+    series: "L 自证"
+    deliver: "CI 集成(预检即门禁红灯不发)"
+    acceptance: "红灯不发"
+    status: pending
+  - version: "2.5.5"
+    gate: prove_public
+    series: "L 自证"
+    deliver: "公开跑分页+复现说明"
+    acceptance: "可复现"
+    status: pending
+  - version: "3.0.0"
+    gate: fabric_readonly
+    series: "M 织网"
+    deliver: "只读聚合(多节点读数合并永不跨机)"
+    acceptance: "跨机只读"
+    status: pending
+  - version: "3.0.1"
+    gate: fabric_topology
+    series: "M 织网"
+    deliver: "节点清单与拓扑"
+    acceptance: "拓扑正确"
+    status: pending
+  - version: "3.0.2"
+    gate: fabric_verify
+    series: "M 织网"
+    deliver: "跨节点回执互验"
+    acceptance: "A 回执 B 可验"
+    status: pending
+  - version: "3.0.3"
+    gate: fabric_assert
+    series: "M 织网"
+    deliver: "网络层只读断言"
+    acceptance: "聚合侧无法触发写"
+    status: pending
