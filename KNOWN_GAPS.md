@@ -2,6 +2,21 @@
 
 按《施工宪法》10.14：每个版本至少保留一条"已知不足"，标出下一版入口。这里记录的是**尚未做到**的部分，不隐藏、不含糊。
 
+## 平台策略：Linux-only，已删除 Windows 降级（2026-11-18）
+
+- 核心代理（daemon / sandbox / collectors）在非 Linux 主机上**抛 `UnsupportedPlatform` 拒绝**，不再返回空数据或"降级隔离"。
+- 已删除的降级点：`sandbox._kill_group` 的 Windows 进程分支、`sandbox.run` 的非 POSIX 降级、`util.which` 的 Windows PATHEXT 分支、`collect_all` 在无 `/proc` 时返回空列表的行为、相关文档中"Windows 也可用/优雅降级"的表述。
+- 发布台（AO Release Studio）仍跨平台：它只是本地 Web 控制台，不含核心运维能力。
+- 对应测试：Linux 专属能力在非 Linux 上 `skip`；非 Linux 上有 `test_refuses_off_linux` / `test_refuses_on_non_linux` 断言"明确拒绝"。
+
+## 发布与更新（已实现，未执行发布）
+
+- 发布是**追加式**：新版本 = 新 tag + 新 Release，不覆盖旧版；同名资产 422 即拒绝，不删除替换（`src/autonomic/github_publish.py`，测试 `tests/test_github_publish.py`）。
+- 每版独立文档：`release/docs/<版本>.md` 共 120 份 + `INDEX.md`（生成器 `tools/gen_version_docs.py`）。
+- 一键发布：`tools/publish_release.py`，**默认 dry-run**，必须 `--confirm PUBLISH`；发布台 `publish_github()` 同样默认 dry-run。
+- 快照更新：`src/autonomic/snapshot_update.py`（Ed25519 验签 + 逐文件 sha256 + 原子替换 + 回滚 + 拒绝路径穿越）。
+- **未执行**：本次没有 push、没有打 tag、没有创建 GitHub Release。token 从 `.secrets/github_token` 或环境变量读取，`.secrets/` 已 gitignore。
+
 ## 平台与验证（重要更正）
 
 - **产品面向 Linux**（systemd / /proc / AF_UNIX / nftables）。Windows 仅用于编辑代码与 PyInstaller 打包，**不是运行环境**，不再以"Windows 降级"作为能力。

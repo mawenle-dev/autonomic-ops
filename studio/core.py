@@ -195,6 +195,43 @@ class ReleaseStudio:
                 return item
         return None
 
+    # ---- one-click release: docs + signed assets + GitHub (append-only) ----
+    def repo_slug(self) -> tuple[str, str]:
+        """Parse owner/repo from the origin remote (ssh or https)."""
+        try:
+            p = subprocess.run(["git", "remote", "get-url", "origin"], cwd=self.root,
+                               capture_output=True, text=True)
+            url = (p.stdout or "").strip()
+        except Exception:  # noqa: BLE001
+            url = ""
+        import re as _re
+        m = _re.search(r"github\.com[:/]([^/]+)/([^/.]+)", url)
+        return (m.group(1), m.group(2)) if m else ("", "")
+
+    def publish_github(self, version: str, assets: list[str], body: str = "",
+                       dry_run: bool = True) -> dict:
+        """Plan/create a GitHub release for ``version`` (append-only).
+
+        Always refuses if the tag's release already exists; never deletes or
+        replaces assets. Default dry_run performs no mutating request.
+        """
+        from autonomic import github_publish as gp
+        owner, repo = self.repo_slug()
+        if not owner or not repo:
+            return {"ok": False, "reason": "no_github_remote"}
+        token = gp.load_token(self.root)
+        publisher = gp.GitHubPublisher(owner, repo, token)
+        detail = self.version_detail(version) or {}
+        notes = body or (f"## {version}\n\n{detail.get('deliver','')}\n\n"
+                         f"{detail.get('highlights','')}\n")
+        return publisher.publish(version, notes, assets, dry_run=dry_run)
+
+    def sync_docs(self, files: list[str], message: str, allow_push: bool = False) -> dict:
+        from autonomic import github_publish as gp
+        owner, repo = self.repo_slug()
+        publisher = gp.GitHubPublisher(owner, repo, gp.load_token(self.root))
+        return publisher.commit_and_push_docs(self.root, files, message, allow_push=allow_push)
+
     def release_yaml(self) -> str:
         return os.path.join(self.root, "release", "release.yaml")
 

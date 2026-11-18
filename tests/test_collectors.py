@@ -11,17 +11,20 @@ from autonomic import collectors  # noqa: E402
 
 
 class TestCollectors(unittest.TestCase):
+    LINUX = sys.platform.startswith("linux")
+
     def test_twelve_collectors(self):
         self.assertEqual(len(collectors.COLLECTORS), 12)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "collectors are Linux-only")
     def test_collect_all_no_crash(self):
         out = collectors.collect_all()
         self.assertEqual(len(out), 12)
         for name, facts in out.items():
             self.assertIsInstance(facts, (list, dict), name)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "collectors are Linux-only")
     def test_cpu_and_memory_are_facts(self):
-        # on Linux these yield real facts; on Windows they may be empty but must not raise
         cpu = collectors.collect_cpu()
         mem = collectors.collect_memory()
         self.assertIsInstance(cpu, list)
@@ -29,16 +32,17 @@ class TestCollectors(unittest.TestCase):
         for f in cpu + mem:
             self.assertTrue(hasattr(f, "metric"))
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "collectors are Linux-only")
     def test_disk_on_root(self):
         d = collectors.collect_disk(["/"])
-        if os.name == "posix":
-            self.assertTrue(d, "expected disk facts on posix")
-            self.assertTrue(any(f.metric == "disk.used_percent" for f in d))
+        self.assertTrue(d, "expected disk facts on linux")
+        self.assertTrue(any(f.metric == "disk.used_percent" for f in d))
 
-    def test_bad_collector_isolated(self):
-        # a collector that raises must not stop others
-        out = collectors.collect_all()
-        self.assertNotIn("Traceback", str(out))
+    @unittest.skipIf(sys.platform.startswith("linux"), "only meaningful off Linux")
+    def test_refuses_off_linux(self):
+        from autonomic.platform_guard import UnsupportedPlatform
+        with self.assertRaises(UnsupportedPlatform):
+            collectors.collect_all()
 
 
 class TestTSDB(unittest.TestCase):

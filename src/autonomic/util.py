@@ -246,37 +246,30 @@ def writable(path: str) -> bool:
 
 
 def is_posix() -> bool:
-    """True where rlimits / process groups / network namespaces exist.
+    """True on the supported platform (Linux).
 
-    The daemon is Linux-only, but ``doctor`` and the unit tests are expected
-    to be usable on a contributor's Windows or macOS machine as well.
+    AutonomicOps is a Linux product; this helper is kept for the few call sites
+    that gate POSIX-only primitives. Non-Linux hosts are refused by
+    ``platform_guard.require_linux`` at the entry points that need them.
     """
     return os.name == "posix"
 
 
 def geteuid() -> int:
-    """Effective UID, or -1 on platforms without ``os.geteuid`` (Windows)."""
+    """Effective UID (Linux). Returns -1 if the host has no ``geteuid``."""
     getter = getattr(os, "geteuid", None)
     return int(getter()) if getter else -1
 
 
 def is_root() -> bool:
-    """Privilege check that never raises on non-POSIX hosts."""
+    """Privilege check for the Linux host."""
     return geteuid() == 0
 
 
 def which(name: str) -> Optional[str]:
-    """Locate an executable.
-
-    Keep the original POSIX resolution (used by firewall / unshare probes)
-    unchanged, and delegate to the stdlib resolver elsewhere so Windows PATH
-    separators and PATHEXT are handled correctly.
-    """
+    """Locate an executable using the fixed POSIX search path."""
     if os.name != "posix":
-        try:
-            return shutil.which(name) or None
-        except (TypeError, ValueError, OSError):
-            return None
+        return None
     for base in os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin").split(":"):
         candidate = os.path.join(base, name)
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):

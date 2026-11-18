@@ -1,9 +1,10 @@
 """12 real collectors + a time-series store (constitution 2.0.0-2.0.5).
 
-Collectors read real OS sources on Linux (/proc, /sys, cgroups, tools) and
-degrade gracefully (quality="stale", empty list) where a source is absent, so
-the same code runs on Windows for tests. The TSDB stores points in segments,
-downsamples to 1m/5m/1h, and answers range queries.
+Collectors read real Linux sources (/proc, /sys, cgroups, tools). AutonomicOps
+is a Linux product: invoking collection on another platform raises
+``UnsupportedPlatform`` rather than returning empty data (no silent downgrade).
+The TSDB stores points in segments, downsamples to 1m/5m/1h, and answers range
+queries; it is platform-independent.
 """
 from __future__ import annotations
 
@@ -215,6 +216,9 @@ COLLECTORS = {
 
 
 def collect_all(**kwargs) -> dict:
+    # Linux-only, fail closed (no empty-list "degradation" on other platforms).
+    from .platform_guard import require_linux
+    require_linux("host metric collection")
     out = {}
     for name, fn in COLLECTORS.items():
         try:

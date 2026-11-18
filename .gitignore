@@ -55,3 +55,6 @@ launch-kit/
 
 # Local build tools (PyInstaller), never committed
 .tools/
+
+# GitHub token and other secrets - never committed
+.secrets/

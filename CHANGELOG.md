@@ -3,6 +3,29 @@
 本文件记录项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 自 1.0.1 起按《施工宪法》逐版施工：一版一件事，先有失败测试再实现，未发布版本标注状态，闸门键在发布时才开启。
 
+## [2026-11-18 晚] 删除 Windows 降级；逐版本文档；签名快照更新；追加式 GitHub 发布
+
+### Removed（平台策略）
+- **删除所有 Windows 降级路径**：`sandbox.run` 非 POSIX 降级、`_kill_group` 的 Windows 分支、`util.which` 的 Windows PATHEXT 分支、`collect_all` 无 `/proc` 时返回空列表的行为，以及文档中"Windows 也可用/优雅降级"的表述。
+- 新增 `platform_guard.require_linux()`：核心能力在非 Linux 上抛 `UnsupportedPlatform`，**明确拒绝而不是静默降级**。发布台（Web 控制台）仍跨平台。
+
+### Added
+- **120 份逐版本文档**：`release/docs/<版本>.md` + `INDEX.md`，每份含本版新增/优点/验收/验证入口/升级回滚（`tools/gen_version_docs.py` 可复现）。
+- **签名快照更新** `src/autonomic/snapshot_update.py`：Ed25519 验签 + 逐文件 sha256 + 原子替换 + 备份回滚 + 拒绝路径穿越；`tests/test_snapshot_update.py` 7 项。
+- **追加式 GitHub 发布** `src/autonomic/github_publish.py`：新 tag 建新 Release，已存在即拒绝；同名资产 422 即拒绝，**永不 DELETE/覆盖**；默认 dry-run；`tests/test_github_publish.py` 7 项。
+- **一键发布** `tools/publish_release.py`：默认 dry-run，必须 `--confirm PUBLISH`；`--push-docs` 才推文档。
+- 发布台 `ReleaseStudio.publish_github()` / `sync_docs()`，均默认 dry-run。
+- `.secrets/github_token` 读取 token，`.secrets/` 已 gitignore。
+
+### Docs
+- 新增 `docs/RELEASE.md`（追加式发布、逐版本文档、快照更新、token 位置、一键发布）。
+- README 明确 **Linux 唯一运行平台**，指向发布文档。
+- KNOWN_GAPS 增加"平台策略/发布与更新"两节。
+
+### Research（已核对官方文档）
+- GitHub Create a release `POST /repos/{owner}/{repo}/releases`；Upload asset 同名返回 422，需先删除旧资产；存在 immutable releases 选项 → 本项目**不删除不覆盖**。
+- 桌面更新主流为**全量快照 + 可选增量 + 签名 + 原子回滚**（Sparkle 全量 zip + delta + EdDSA）→ 本项目采用签名快照，不生成 delta。
+
 ## [2026-11-18] 修复 EXE 闪退；Linux 全量验收；120/120 版本；Ed25519 真签名
 
 ### Fixed

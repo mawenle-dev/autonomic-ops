@@ -448,7 +448,7 @@
       "group": "G8",
       "desc": "采集开销达标（单轮<50ms）",
       "ok": true,
-      "evidence": "cpu+mem collect 4.27ms"
+      "evidence": "cpu+mem collect 3.84ms"
     },
     {
       "id": 65,
@@ -462,7 +462,7 @@
       "group": "G9",
       "desc": "五级处置可切换且自动解除",
       "ok": true,
-      "evidence": "level set={'subject': '1.2.3.4', 'level': 'challenge', 'since': 1794999428.1186795, 'expires': 1795000328.1186795}"
+      "evidence": "level set={'subject': '1.2.3.4', 'level': 'challenge', 'since': 1795000791.0431907, 'expires': 1795001691.0431907}"
     },
     {
       "id": 67,
@@ -483,7 +483,7 @@
       "group": "G9",
       "desc": "完整性变更 5s 内成立且可撤销",
       "ok": true,
-      "evidence": "integrity changes=['/tmp/ao_audit_qmpi9ot5/watched.conf']"
+      "evidence": "integrity changes=['/tmp/ao_audit_4rmhms3l/watched.conf']"
     },
     {
       "id": 70,
@@ -567,14 +567,14 @@
       "group": "G11",
       "desc": "断网+本地模型可用",
       "ok": true,
-      "evidence": "local counsel ask={'ok': True, 'trace_id': 'ed62167e7fc31956', 'proposal': {'k': 1}, 'requires_double_sign': True}"
+      "evidence": "local counsel ask={'ok': True, 'trace_id': 'ac68145ab80f8af6', 'proposal': {'k': 1}, 'requires_double_sign': True}"
     },
     {
       "id": 82,
       "group": "G11",
       "desc": "AI 提案永不自动执行",
       "ok": true,
-      "evidence": "proposal={'ok': True, 'trace_id': '94309379856e82d1', 'proposal': {'k': 1}, 'requires_double_sign': True}"
+      "evidence": "proposal={'ok': True, 'trace_id': '713e3b44d4722d4e', 'proposal': {'k': 1}, 'requires_double_sign': True}"
     },
     {
       "id": 83,
@@ -686,7 +686,7 @@
       "group": "G13",
       "desc": "nonce 出现在 e2e 日志中",
       "ok": true,
-      "evidence": "nonce=1794999428237-01b0159de702e206"
+      "evidence": "nonce=1795000791156-eeae7123265b5b23"
     },
     {
       "id": 99,

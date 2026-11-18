@@ -78,7 +78,11 @@ class TestUtil(unittest.TestCase):
         self.assertEqual(util.is_posix(), os.name == "posix")
         self.assertIsInstance(util.is_root(), bool)
         self.assertIsInstance(util.geteuid(), int)
-        self.assertTrue(util.which(sys.executable), "which() must resolve an absolute interpreter path")
+        if sys.platform.startswith("linux"):
+            self.assertTrue(util.which(sys.executable),
+                            "which() must resolve an absolute interpreter path on Linux")
+        else:
+            self.assertIsNone(util.which("python"), "which() is POSIX-only (fail closed)")
 
     def test_valid_ipv4(self):
         self.assertTrue(util.valid_ipv4("45.77.12.34"))
@@ -111,7 +115,7 @@ class TestAuditChain(unittest.TestCase):
 
 
 class TestSandbox(unittest.TestCase):
-    """Portable: drive the child with sys.executable, not Unix shell tools."""
+    """Sandbox is Linux-only and fails closed elsewhere (no degradation)."""
 
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix="sandbox-")
@@ -122,13 +126,11 @@ class TestSandbox(unittest.TestCase):
 
     def test_capabilities_report_the_platform(self):
         caps = Sandbox(self.config).capabilities()
-        self.assertEqual(caps["posix"], os.name == "posix")
+        self.assertEqual(caps["posix"], sys.platform.startswith("linux"))
         self.assertIsInstance(caps["root"], bool)
         self.assertIn("netns_error", caps)
-        if not caps["posix"]:
-            self.assertFalse(caps["netns"])
-            self.assertFalse(caps["ulimit"])
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "sandbox is Linux-only")
     def test_runs_and_captures_output(self):
         box = Sandbox(self.config)
         result = box.run([sys.executable, "-c", "print('hello')"], timeout=10)
@@ -136,14 +138,13 @@ class TestSandbox(unittest.TestCase):
         self.assertIn("hello", result.stdout)
         self.assertFalse(result.timed_out)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "sandbox is Linux-only")
     def test_timeout_is_enforced(self):
         box = Sandbox(self.config)
         result = box.run([sys.executable, "-c", "import time; time.sleep(5)"], timeout=1)
         self.assertTrue(result.timed_out)
-        if os.name != "posix":
-            self.assertTrue(result.degraded_isolation,
-                            "non-POSIX fallback must never claim full isolation")
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "sandbox is Linux-only")
     def test_cancel_event_kills_promptly(self):
         box = Sandbox(self.config)
         event = threading.Event()
@@ -157,6 +158,12 @@ class TestSandbox(unittest.TestCase):
                          timeout=30, cancel_event=event)
         self.assertTrue(result.cancelled)
         self.assertLess(result.duration, 5)
+
+    @unittest.skipIf(sys.platform.startswith("linux"), "only meaningful off Linux")
+    def test_refuses_on_non_linux(self):
+        from autonomic.platform_guard import UnsupportedPlatform
+        with self.assertRaises(UnsupportedPlatform):
+            Sandbox(self.config).run([sys.executable, "-c", "print(1)"])
 
 
 class TestConfigPaths(unittest.TestCase):

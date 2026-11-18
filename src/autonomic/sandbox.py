@@ -18,10 +18,10 @@ container runtime this is best-effort process isolation. The policy engine is
 what prevents destructive actions from reaching the sandbox in the first
 place; the sandbox is defence in depth, not the only defence.
 
-On a non-POSIX development host (Windows) none of the layers above exist, so
-``run()`` falls back to a plain child process and is *always* reported with
-``degraded_isolation=True``. That fallback exists for unit tests and ``doctor``
-only; production isolation remains Linux-only.
+On non-Linux hosts none of these layers exist. Rather than silently degrading,
+``run()`` raises ``UnsupportedPlatform``: AutonomicOps is a Linux product and a
+silent downgrade would hide the loss of isolation. The release studio console is
+the only cross-platform component.
 """
 
 from __future__ import annotations
@@ -94,6 +94,9 @@ class Sandbox:
     ) -> ExecResult:
         if not argv:
             return ExecResult(rc=2, stderr="empty argv", notes=["nothing to run"])
+        # Linux-only, fail closed: never silently run without isolation.
+        from .platform_guard import require_linux
+        require_linux("sandbox execution")
         timeout = float(timeout or self.config.get("codegen.sandbox_timeout", 10))
         cpu_seconds = int(cpu_seconds or self.config.get("codegen.sandbox_cpu_seconds", 10))
         memory_mb = int(memory_mb or self.config.get("codegen.sandbox_memory_mb", 256))
@@ -228,16 +231,15 @@ class Sandbox:
         ).format(cpu=max(1, cpu_seconds), mem=max(64, memory_mb) * 1024, fsize=20 * 1024)
 
     def _kill_group(self, proc: subprocess.Popen) -> None:
-        if util.is_posix():
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                time.sleep(0.4)
-                if proc.poll() is None:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                return
-            except (AttributeError, ProcessLookupError, PermissionError, OSError):
-                pass
-        # Windows has no process groups; fall back to killing the child only.
+        # Linux-only path (run() refuses non-Linux before reaching here).
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            time.sleep(0.4)
+            if proc.poll() is None:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return
+        except (AttributeError, ProcessLookupError, PermissionError, OSError):
+            pass
         try:
             proc.kill()
         except OSError:

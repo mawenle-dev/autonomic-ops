@@ -2,6 +2,11 @@
 
 > 自托管、可离线、可回滚的单机运维代理。
 
+**平台：Linux（唯一运行平台）。** 核心代理依赖 systemd、`/proc`、AF_UNIX、nftables/iptables；在非 Linux 主机上**直接拒绝**（`UnsupportedPlatform`），不做静默降级。发布台（AO Release Studio）是唯一跨平台的组件，它只是本地 Web 控制台，可在 Windows 上打开。
+
+- 发布与更新机制（追加式发布、逐版本文档、签名快照更新）：见 [`docs/RELEASE.md`](docs/RELEASE.md)。
+- 每个版本的独立文档：`release/docs/<版本>.md`，索引 `release/docs/INDEX.md`。
+
 AutonomicOps 是一个运行在单台 Linux 主机上的常驻运维代理。它周期性采集系统指标，用内置检测器与可插拔插件发现异常，按声明式规则与策略做出**有界处置**（重启服务、清理过期文件、封禁可疑 IP、发送告警等），并在每次改动前做快照、改动后可一键回滚，全程写入哈希链审计日志。
 
 设计目标：
