@@ -114,3 +114,87 @@ def compliance_score(results: dict[str, bool]) -> dict:
     return {"total": len(CONTROL_IDS), "passed": passed,
             "score": round(passed / len(CONTROL_IDS) * 100, 1),
             "failed": [cid for cid in CONTROL_IDS if not results.get(cid)]}
+
+
+# --------------------------------------------------------------- scenario engine
+from collections import defaultdict  # noqa: E402
+
+
+class CountingBucket:
+    """Sliding-window counter per dimension key (2.1.0)."""
+
+    def __init__(self, window: float = 60.0):
+        self.window = window
+        self._events: dict[str, list[tuple[float, float]]] = defaultdict(list)
+
+    def add(self, key: str, now: float, weight: float = 1.0) -> None:
+        self._events[key].append((now, weight))
+        self._prune(key, now)
+
+    def _prune(self, key: str, now: float) -> None:
+        cutoff = now - self.window
+        self._events[key] = [(t, w) for t, w in self._events[key] if t >= cutoff]
+
+    def count(self, key: str, now: float) -> float:
+        self._prune(key, now)
+        return sum(w for _t, w in self._events[key])
+
+
+class LeakyBucket:
+    """Token bucket: capacity + refill rate per second (rate limiting)."""
+
+    def __init__(self, capacity: float, refill_per_sec: float):
+        self.capacity = capacity
+        self.rate = refill_per_sec
+        self.tokens = capacity
+        self.last = 0.0
+
+    def allow(self, now: float, cost: float = 1.0) -> bool:
+        if self.last == 0.0:
+            self.last = now
+        elapsed = max(0.0, now - self.last)
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
+        self.last = now
+        if self.tokens >= cost:
+            self.tokens -= cost
+            return True
+        return False
+
+
+class ScenarioEngine:
+    """Multi-dimension counting + leaky-bucket scenario detection (2.1.0).
+
+    A 'slow' brute force that stays under a per-second rate but accumulates over
+    a window is caught by the counting bucket; a burst is caught by the leaky
+    bucket. Both dimensions are evaluated and the highest level wins.
+    """
+
+    LEVELS = ("observe", "rate_limit", "challenge", "isolate", "ban")
+
+    def __init__(self, window: float = 60.0, count_thresholds=None,
+                 rate_capacity: float = 10.0, rate_refill: float = 0.2):
+        self.counting = CountingBucket(window)
+        self.count_thresholds = count_thresholds or [(5, "rate_limit"), (15, "challenge"),
+                                                     (30, "isolate"), (60, "ban")]
+        self.rate_capacity = rate_capacity
+        self.rate_refill = rate_refill
+        self.buckets: dict[str, LeakyBucket] = {}
+
+    def _level_for_count(self, n: float) -> str:
+        level = "observe"
+        for threshold, lvl in self.count_thresholds:
+            if n >= threshold:
+                level = lvl
+        return level
+
+    def observe(self, dims: dict, now: float, weight: float = 1.0) -> dict:
+        key = "|".join(f"{k}={v}" for k, v in sorted(dims.items()))
+        self.counting.add(key, now, weight)
+        bucket = self.buckets.setdefault(key, LeakyBucket(self.rate_capacity, self.rate_refill))
+        rate_ok = bucket.allow(now, weight)
+        n = self.counting.count(key, now)
+        by_count = self._level_for_count(n)
+        by_rate = "observe" if rate_ok else "rate_limit"
+        level = max(by_count, by_rate, key=self.LEVELS.index)
+        return {"key": key, "count": n, "rate_ok": rate_ok,
+                "level": level, "by_count": by_count, "by_rate": by_rate}

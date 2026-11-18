@@ -13,12 +13,25 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import threading
+import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-from .core import Preflight, ReleaseStudio
+# Import works in three contexts:
+#   1. frozen EXE (PyInstaller onefile): app.py is __main__, no package ->
+#      "core" is a bundled top-level module.
+#   2. `python -m studio.app`: package context -> relative import.
+#   3. `python studio/app.py`: script context -> add our dir to sys.path.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+try:  # frozen / script
+    from core import Preflight, ReleaseStudio  # type: ignore
+except ImportError:  # package
+    from .core import Preflight, ReleaseStudio  # type: ignore
 
 
 def _server(studio: ReleaseStudio, pf: Preflight):
@@ -214,11 +227,43 @@ state();versions();
 """
 
 
+def _resolve_root(explicit: str = "") -> str:
+    """Locate the data root that contains release/versions.yaml.
+
+    - frozen EXE: <exe_dir>/Data (portable layout)
+    - source:     repo root (parent of studio/)
+    """
+    if explicit:
+        return os.path.abspath(explicit)
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        cand = os.path.join(exe_dir, "Data")
+        if os.path.isdir(cand):
+            return cand
+        return exe_dir
+    return os.path.dirname(_HERE)
+
+
+def _have_python() -> str:
+    """Return a python executable for preflight, or '' if none (frozen)."""
+    import shutil
+    for name in ("python3", "python"):
+        p = shutil.which(name)
+        if p:
+            return p
+    if not getattr(sys, "frozen", False):
+        return sys.executable
+    return ""
+
+
 def make_server(root: str, port: int = 8765):
     studio = ReleaseStudio(root)
     pf = Preflight()
+    py = _have_python()
 
     def compile_check():
+        if not py:
+            return True, "frozen build: compile check done at build time (skipped at runtime)"
         import py_compile
         files = []
         for base, _d, names in os.walk(os.path.join(root, "src")):
@@ -233,26 +278,109 @@ def make_server(root: str, port: int = 8765):
             return False, str(exc)
 
     def test_check():
+        if not py:
+            return True, "frozen build: unit tests run from source (skipped at runtime)"
         import subprocess
-        p = subprocess.run(["python", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
-                           cwd=root, capture_output=True, text=True)
-        return p.returncode == 0, (p.stdout + p.stderr)[-2000:]
+        p = subprocess.run([py, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
+                           cwd=root, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        out = (p.stdout or "") + (p.stderr or "")
+        return p.returncode == 0, out[-2000:]
 
-    pf.add("compile", compile_check)
-    pf.add("unit tests", test_check)
+    def builtin_selftest():
+        """Real in-process self-test of the bundled core libraries.
+
+        Used in the frozen EXE where no external python is available. It
+        exercises the same code paths (FVC-R budget/receipt, Ed25519 signing,
+        ledger bundle verify) instead of pretending to pass.
+        """
+        try:
+            from autonomic import fvc, signing, ledger
+            # budget must refuse at zero
+            acct = fvc.BudgetAccount(fvc.Budget(bytes=0, files=0, actions=0, blast=0, rate=0))
+            ok, _ = acct.debit({"bytes": 1})
+            assert not ok, "zero budget must refuse"
+            # receipt must require undo
+            try:
+                fvc.Receipt(trace_id="t", fact_refs=["f"], verdict={"id": "v"},
+                            covenant={"a": 1}, txn={"id": "x"}, undo={})
+                raise AssertionError("receipt without undo must fail")
+            except ValueError:
+                pass
+            # Ed25519 RFC 8032 TEST 1 vector
+            seed = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+            pub = bytes.fromhex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+            sig = bytes.fromhex("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155"
+                                "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
+            assert signing.sign(seed, b"") == sig, "ed25519 vector mismatch"
+            assert signing.verify(pub, b"", sig), "ed25519 verify failed"
+            # ledger bundle sign+verify round-trip
+            s2, _pub2 = signing.generate_keypair()
+            b = ledger.export_bundle([{"seq": 1, "epoch": 1, "hash": "a", "id": "c"}], [],
+                                     private_seed=s2)
+            r = ledger.verify_bundle(b)
+            assert r["ok"] and r["signature_ok"], "bundle verify failed"
+            return True, "builtin self-test: budget/receipt/ed25519/ledger OK"
+        except Exception as exc:  # noqa: BLE001
+            return False, f"builtin self-test failed: {exc}"
+
+    def roadmap_check():
+        try:
+            vs = studio.versions()
+            ok = len(vs) == 120
+            return ok, f"roadmap: {len(vs)} versions parsed"
+        except Exception as exc:  # noqa: BLE001
+            return False, f"roadmap parse failed: {exc}"
+
+    def manifest_check():
+        mp = os.path.join(os.path.dirname(root), "MANIFEST.json")
+        if not os.path.exists(mp):
+            mp = os.path.join(root, "MANIFEST.json")
+        if not os.path.exists(mp):
+            return True, "no MANIFEST.json (source mode)"
+        try:
+            import hashlib
+            with open(mp, "r", encoding="utf-8") as fh:
+                m = json.load(fh)
+            base = os.path.dirname(mp)
+            bad = []
+            for f in m.get("files", []):
+                p = os.path.join(base, f["path"])
+                if not os.path.exists(p):
+                    bad.append(f["path"]); continue
+                h = hashlib.sha256()
+                with open(p, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(65536), b""):
+                        h.update(chunk)
+                if h.hexdigest() != f["sha256"]:
+                    bad.append(f["path"])
+            return (not bad), (f"manifest: {len(m.get('files', []))} files, {len(bad)} bad")
+        except Exception as exc:  # noqa: BLE001
+            return False, f"manifest verify failed: {exc}"
+
+    pf.add("roadmap", roadmap_check)
+    pf.add("manifest", manifest_check)
+    if getattr(sys, "frozen", False):
+        # The portable EXE is self-contained: verify its own bundled logic.
+        pf.add("builtin self-test", builtin_selftest)
+    else:
+        pf.add("compile", compile_check)
+        pf.add("unit tests", test_check)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), _server(studio, pf))
     return httpd
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    ap.add_argument("--root", default="")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-browser", action="store_true")
     args = ap.parse_args()
-    httpd = make_server(args.root, args.port)
+    root = _resolve_root(args.root)
+    httpd = make_server(root, args.port)
     url = f"http://127.0.0.1:{args.port}/"
     print(f"AO Release Studio -> {url}")
+    print(f"data root: {root}")
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
@@ -262,4 +390,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:  # noqa: BLE001 - never flash-close: show the error
+        traceback.print_exc()
+        try:
+            input("启动失败，按回车关闭窗口…")
+        except Exception:  # noqa: BLE001
+            pass
+        raise

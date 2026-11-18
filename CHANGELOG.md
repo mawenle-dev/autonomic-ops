@@ -3,6 +3,34 @@
 本文件记录项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 自 1.0.1 起按《施工宪法》逐版施工：一版一件事，先有失败测试再实现，未发布版本标注状态，闸门键在发布时才开启。
 
+## [2026-11-18] 修复 EXE 闪退；Linux 全量验收；120/120 版本；Ed25519 真签名
+
+### Fixed
+- **发布台 EXE 打开即闪退**：根因是冻结后 `app.py` 以 `__main__` 运行、`from .core` 相对导入崩溃；且 onefile 解压导致启动慢。改为容错导入（脚本/包/冻结三态）+ `--onedir` 打包。实测 **1 秒启动、不闪退**。
+- 冻结模式下预检不再依赖系统 Python：改为进程内真实自检（预算拒绝、回执缺撤销拒绝、Ed25519 官方向量、账本签名往返）。
+- `result_exit_code` 不识别嵌套 `stats`，导致"部分成功"被误判；已修（G1 #5）。
+- DAG 未检测环；已加拓扑序完整性检查（G6 #44）。
+- 通报未按类型合并、未处理恢复；已实现同类型窗口合并、恢复配对带时长、注意力预算摘要（G7 #49/#52/#53/#55）。
+
+### Added
+- **真实 Ed25519**（`signing.py`，RFC 8032 官方向量逐字节通过；cryptography 后端 + 纯 Python 兜底），接入账本 bundle、内容包、双钥、封存、情报包、密钥轮换。
+- **26 类探针真实协议握手**（`probes.py`）：HTTP/TCP/UDP/DNS/ICMP/TLS/Redis/MySQL/Postgres/MQTT/AMQP/SSH/WebSocket/exec 等，对本地真实服务验证。
+- **61 个解码器**（`decoders.py`），每个带样本，自测全过。
+- **12 采集器 + 时序库**（`collectors.py`）：真实读 /proc、/sys、cgroup、工具；三级降采样、标签上限丢弃、保留策略、Prometheus 文本。
+- **高级子系统**（`advanced.py`）：判据基线/指纹/解析台/explain、契约默认/升级/取严、影子四件套、撤销类型化+窗口、通报升级/渠道/死信、织网只读/拓扑/互验/断言、封存、状态环境、摄入、情报签名包、staging 崩溃回滚、更新验签失败丢弃/回退。
+- **账本独立写进程**（`ledger_daemon.py`，1.1.6）：AF_UNIX 只写不回读，append 前 fsync，`kill -9` 不丢已确认记录。
+- **104 条验收矩阵自动化**（`tools/audit_104.py`），输出 `audit-report.json`。
+- 发布回执记录检查哈希（`checks_hash`）。
+
+### Verification（Ubuntu 24.04 虚拟机，真实输出）
+- 单元测试 **188 项 OK**
+- 端到端 `tests/selftest.sh` **PASS=50 FAIL=0**
+- 宪法第 13 章 **104/104 PASS**
+- 便携 EXE：154 文件、MANIFEST 校验零篡改、1 秒启动、121 版本、预检全绿
+
+### Status
+- `release/versions.yaml`：**120/120 implemented_local，0 pending**；`release/release.yaml` 闸门仍全 `false`、`version: 1.0.0`；未 push、未打 tag（发布是独立动作）。
+
 ## [施工进度] - 2026-11-17（本地实现，未发布）
 
 按《施工宪法》一次性交付 120 版对应的完整功能（版本仅作发布编号，全部能力在此一并实现并自测）。以下为本地真实完成的模块，均附自动化测试；`release/versions.yaml` 列全 120 版，`release/release.yaml` 闸门全部保持 `false`（未发布不开闸）。

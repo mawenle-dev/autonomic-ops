@@ -52,3 +52,6 @@ release/dist/
 
 # Personal release notes / launch checklist - not part of the shipped project
 launch-kit/
+
+# Local build tools (PyInstaller), never committed
+.tools/

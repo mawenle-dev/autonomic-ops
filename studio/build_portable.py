@@ -19,6 +19,22 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "release", "dist")
+# Prefer a project-local PyInstaller (installed under .tools) so the build never
+# depends on a system-wide install or writes outside the project.
+_TOOLS = os.path.join(ROOT, ".tools")
+if os.path.isdir(_TOOLS) and _TOOLS not in sys.path:
+    sys.path.insert(0, _TOOLS)
+
+
+def _build_env() -> dict:
+    """Environment for the PyInstaller subprocess: put .tools on PYTHONPATH."""
+    env = dict(os.environ)
+    parts = [p for p in (_TOOLS, os.path.join(ROOT, "studio")) if os.path.isdir(p)]
+    existing = env.get("PYTHONPATH", "")
+    if existing:
+        parts.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(parts)
+    return env
 
 
 def sha256(path: str) -> str:
@@ -40,15 +56,21 @@ def build(spec_dir: str | None = None) -> dict:
     dest = os.path.join(OUT, f"AO-Studio-portable-v{ver}")
     if os.path.exists(dest):
         shutil.rmtree(dest)
+    os.makedirs(dest, exist_ok=True)
+    raw = os.path.join(OUT, "_pyi")          # raw PyInstaller onedir output
+    if os.path.exists(raw):
+        shutil.rmtree(raw)
     data = os.path.join(dest, "Data")
     for d in ("release", "src", "tests", "studio", "config", "docs"):
         os.makedirs(os.path.join(data, d), exist_ok=True)
+
     def copy_tree(srcdir, dstdir, allow_dirs=None, allow_files=None):
         for base, dirs, names in os.walk(srcdir):
             # Never recurse into generated/derived trees: doing so copies a
             # previous portable package into the next one and explodes paths.
             dirs[:] = [d for d in dirs if d not in
-                       ("__pycache__", "portable", ".build", ".spec", ".tmp", ".disttest", ".wtest", ".stest")]
+                       ("__pycache__", "portable", ".build", ".spec", ".tmp",
+                        ".disttest", ".wtest", ".stest", "_pyi", ".tools")]
             if allow_dirs is not None:
                 dirs[:] = [d for d in dirs if d in allow_dirs]
             for n in names:
@@ -69,17 +91,38 @@ def build(spec_dir: str | None = None) -> dict:
     for src, dst in (("src", "src"), ("tests", "tests"), ("studio", "studio"),
                      ("config", "config"), ("docs", "docs")):
         copy_tree(os.path.join(ROOT, src), os.path.join(data, dst))
-    # PyInstaller onefile build
+    # PyInstaller ONEDIR build (fast start, no onefile extraction delay).
+    # --paths studio lets the frozen entry resolve `import core`; the autonomic
+    # package is bundled so the built-in self-test can run in-process.
     entry = os.path.join(ROOT, "studio", "app.py")
-    cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--noconfirm",
-           "--distpath", dest, "--workpath", os.path.join(OUT, ".build"),
+    cmd = [sys.executable, "-m", "PyInstaller", "--onedir", "--noconfirm",
+           "--paths", os.path.join(ROOT, "studio"),
+           "--paths", os.path.join(ROOT, "src"),
+           "--hidden-import", "core",
+           "--collect-submodules", "autonomic",
+           "--distpath", raw, "--workpath", os.path.join(OUT, ".build"),
            "--specpath", os.path.join(OUT, ".spec"),
            "--name", "AO-Release-Studio", entry]
-    proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
+                          env=_build_env())
     exe = os.path.join(dest, "AO-Release-Studio.exe")
-    if proc.returncode != 0 or not os.path.exists(exe):
+    produced = os.path.join(raw, "AO-Release-Studio")
+    if proc.returncode != 0 or not os.path.isdir(produced):
         return {"ok": False, "reason": "pyinstaller_failed", "stdout": proc.stdout[-2000:],
                 "stderr": proc.stderr[-2000:]}
+    # Move the onedir bundle (exe + _internal) to the top of dest, next to Data.
+    for name in os.listdir(produced):
+        s = os.path.join(produced, name)
+        d = os.path.join(dest, name)
+        if os.path.isdir(s):
+            if os.path.exists(d):
+                shutil.rmtree(d)
+            shutil.copytree(s, d)
+        else:
+            shutil.copy2(s, d)
+    shutil.rmtree(raw, ignore_errors=True)
+    if not os.path.exists(exe):
+        return {"ok": False, "reason": "exe_missing_after_onedir"}
     # MANIFEST self-check data
     files = []
     for base, dirs, names in os.walk(dest):

@@ -11,6 +11,7 @@ Responsibilities:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -209,7 +210,8 @@ class ReleaseStudio:
                 "next": nxt["version"] if nxt else None,
                 "next_detail": nxt, "total_versions": len(vs)}
 
-    def publish(self, preflight_ok: bool, gate: str, notes: str = "") -> dict:
+    def publish(self, preflight_ok: bool, gate: str, notes: str = "",
+                checks: Optional[list] = None) -> dict:
         if not preflight_ok:
             return {"ok": False, "reason": "preflight_not_green", "publish_enabled": False}
         st = self.state()
@@ -229,6 +231,9 @@ class ReleaseStudio:
                     "version": today_ver, "note": "一天最多发布一版"}
         # one-step only: target must be exactly current + one roadmap entry
         code, log = self.runner(["git", "tag", f"v{target}"])
+        checks = checks or []
+        checks_hash = hashlib.sha256(
+            json.dumps(checks, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:32]
         receipt = {
             "version": target,
             "previous": st["current"],
@@ -237,7 +242,8 @@ class ReleaseStudio:
             "ts": time.time(),
             "tag_exit_code": code,
             "tag_log": log,
-            "checks_hash": "",
+            "checks": checks,
+            "checks_hash": checks_hash,
             "status": "published" if code == 0 else "tag_failed",
         }
         if code == 0:

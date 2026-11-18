@@ -57,6 +57,23 @@ def result_exit_code(result: Optional[dict], *, invalid: bool = False) -> int:
     removed = result.get("removed") or []
     failed_n = len(failed) if isinstance(failed, list) else int(bool(failed))
     success_n = len(restored) + len(removed)
+    # F-04: also honour the nested stats shape used by restore/cleanup
+    # ({stats: {failed: {files: N}, moved: {files: M}}}) so partial success is
+    # never reported as total failure (or vice versa).
+    stats = result.get("stats") if isinstance(result.get("stats"), dict) else {}
+    def _n(key):
+        v = stats.get(key)
+        if isinstance(v, dict):
+            return int(v.get("files", 0) or 0)
+        if isinstance(v, (int, float)):
+            return int(v)
+        return 0
+    stat_failed = _n("failed")
+    stat_moved = _n("moved") + _n("restored") + _n("removed")
+    failed_n = max(failed_n, stat_failed)
+    success_n = max(success_n, stat_moved)
+    if result.get("partial") is True:
+        return 2
     if failed_n and success_n:
         return 2
     if failed_n or ok is False:

@@ -45,6 +45,9 @@ class DAG:
         for s in self.steps:
             if not isinstance(s.when, dict) or not s.when.get("verdict"):
                 raise ChoreoError(f"step {s.id}: condition must be a verdict expression")
+        # cycle detection (G6 #44): a valid DAG must have a full topological order
+        if len(self.topo_order()) != len(self.steps):
+            raise ChoreoError("cycle detected in DAG")
 
     def topo_order(self) -> list[str]:
         indeg = {s.id: 0 for s in self.steps}

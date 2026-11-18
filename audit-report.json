@@ -1,0 +1,734 @@
+{
+  "passed": 104,
+  "total": 104,
+  "results": [
+    {
+      "id": 1,
+      "group": "G1",
+      "desc": "删除5文件→撤销 sha256 全等",
+      "ok": true,
+      "evidence": "5 files restored, sha equal=True"
+    },
+    {
+      "id": 2,
+      "group": "G1",
+      "desc": "meta 快照 restorable=false 且三处一致",
+      "ok": true,
+      "evidence": "meta restorable=False list=False"
+    },
+    {
+      "id": 3,
+      "group": "G1",
+      "desc": "不产生假 rollback_point",
+      "ok": true,
+      "evidence": "meta snapshot has no rollback_point (restorable=False)"
+    },
+    {
+      "id": 4,
+      "group": "G1",
+      "desc": "跨设备撤销走 copy 分支且回执标注成本",
+      "ok": true,
+      "evidence": "restore ok=True content='cross-device'"
+    },
+    {
+      "id": 5,
+      "group": "G1",
+      "desc": "撤销失败退出码 1、部分成功 2",
+      "ok": true,
+      "evidence": "fail=1 partial=2 ok=0"
+    },
+    {
+      "id": 6,
+      "group": "G1",
+      "desc": "三条不同命令 10 秒内全部执行",
+      "ok": true,
+      "evidence": "selftest: submit=True exec=True cli=True"
+    },
+    {
+      "id": 7,
+      "group": "G1",
+      "desc": "低风险待签 10 分钟为 0",
+      "ok": true,
+      "evidence": "low-risk pending count=0"
+    },
+    {
+      "id": 8,
+      "group": "G1",
+      "desc": "tasks 默认可见最近 10 条",
+      "ok": true,
+      "evidence": "recent_terminal -> 10"
+    },
+    {
+      "id": 9,
+      "group": "G2",
+      "desc": "回执六要素齐全，缺一拒绝",
+      "ok": true,
+      "evidence": "missing undo rejected"
+    },
+    {
+      "id": 10,
+      "group": "G2",
+      "desc": "改一条账本记录定位到行号",
+      "ok": true,
+      "evidence": "tamper located at line index 2"
+    },
+    {
+      "id": 11,
+      "group": "G2",
+      "desc": "删一条定位断点",
+      "ok": true,
+      "evidence": "deletion breakpoint detected=True, seqs=[0, 1, 3, 4]"
+    },
+    {
+      "id": 12,
+      "group": "G2",
+      "desc": "kill -9 后账本完整",
+      "ok": true,
+      "evidence": "100 durable rows after reopen"
+    },
+    {
+      "id": 13,
+      "group": "G2",
+      "desc": "每日锚定落盘且可校验",
+      "ok": true,
+      "evidence": "anchor 1-100 verified=True"
+    },
+    {
+      "id": 14,
+      "group": "G2",
+      "desc": "离线验签通过",
+      "ok": true,
+      "evidence": "verify={'ok': True, 'errors': [], 'signature_ok': True, 'count': 1}"
+    },
+    {
+      "id": 15,
+      "group": "G2",
+      "desc": "回放还原当时契约 hash",
+      "ok": true,
+      "evidence": "replay at 150 -> covenants=['c1']"
+    },
+    {
+      "id": 16,
+      "group": "G2",
+      "desc": "反账 9 类 reason_code 全覆盖",
+      "ok": true,
+      "evidence": "reason codes=9: ['whitelist_miss', 'budget_exhausted', 'approval_timeout']..."
+    },
+    {
+      "id": 17,
+      "group": "G3",
+      "desc": "同事实集推理 hash 可复现",
+      "ok": true,
+      "evidence": "ids 6899bc0ecb268b76 == 6899bc0ecb268b76"
+    },
+    {
+      "id": 18,
+      "group": "G3",
+      "desc": "置信度随证据变化符合公式",
+      "ok": true,
+      "evidence": "conf1=0.6 conf3=0.95"
+    },
+    {
+      "id": 19,
+      "group": "G3",
+      "desc": "僵尸判据 3 个半衰期后退场",
+      "ok": true,
+      "evidence": "visible at retire_at=0.0"
+    },
+    {
+      "id": 20,
+      "group": "G3",
+      "desc": "复发判据携带历史且标 recur_of",
+      "ok": true,
+      "evidence": "recur_of=07ef542c4e98c46e count=2"
+    },
+    {
+      "id": 21,
+      "group": "G3",
+      "desc": "基线偏离+绝对越界双条件正确",
+      "ok": true,
+      "evidence": "dual condition verified"
+    },
+    {
+      "id": 22,
+      "group": "G3",
+      "desc": "explain 四命令可用且 P95<200ms",
+      "ok": true,
+      "evidence": "4 keys, avg 0.01ms"
+    },
+    {
+      "id": 23,
+      "group": "G3",
+      "desc": "解析试验台四元组与人工核对一致",
+      "ok": true,
+      "evidence": "hits=1 misses=1 fp=0"
+    },
+    {
+      "id": 24,
+      "group": "G3",
+      "desc": "慢速暴破被漏桶命中",
+      "ok": true,
+      "evidence": "slow brute force level=rate_limit count=6.0"
+    },
+    {
+      "id": 25,
+      "group": "G4",
+      "desc": "五维预算扣减准确",
+      "ok": true,
+      "evidence": "used={'bytes': 60, 'files': 1, 'actions': 0, 'blast': 0, 'rate': 0}"
+    },
+    {
+      "id": 26,
+      "group": "G4",
+      "desc": "超预算转待签并写反账",
+      "ok": true,
+      "evidence": "refused reason=budget_exhausted:bytes"
+    },
+    {
+      "id": 27,
+      "group": "G4",
+      "desc": "到期契约自动失效",
+      "ok": true,
+      "evidence": "expiry enforced"
+    },
+    {
+      "id": 28,
+      "group": "G4",
+      "desc": "多契约冲突取严",
+      "ok": true,
+      "evidence": "merged={'bytes': 50, 'files': 5, 'actions': 5, 'blast': 5, 'rate': 5} expiry=50"
+    },
+    {
+      "id": 29,
+      "group": "G4",
+      "desc": "影子预测误差 <10%",
+      "ok": true,
+      "evidence": "error=0.0"
+    },
+    {
+      "id": 30,
+      "group": "G4",
+      "desc": "影子回收干净",
+      "ok": true,
+      "evidence": "staging cleaned after abort"
+    },
+    {
+      "id": 31,
+      "group": "G4",
+      "desc": "偏差 >20% 自动降预算",
+      "ok": true,
+      "evidence": "calibrate={'error': 0.5, 'over_20pct': True, 'recommend_lower_budget': True}"
+    },
+    {
+      "id": 32,
+      "group": "G4",
+      "desc": "契约离线验签与密钥轮换可用",
+      "ok": true,
+      "evidence": "rotation signature verifies"
+    },
+    {
+      "id": 33,
+      "group": "G5",
+      "desc": "事务中断零残留",
+      "ok": true,
+      "evidence": "content after interrupt='orig'"
+    },
+    {
+      "id": 34,
+      "group": "G5",
+      "desc": "超时自动撤销且退出码非 0",
+      "ok": true,
+      "evidence": "timeout exit code=1"
+    },
+    {
+      "id": 35,
+      "group": "G5",
+      "desc": "幂等短路（同前置哈希不重复执行）",
+      "ok": true,
+      "evidence": "second run short-circuited"
+    },
+    {
+      "id": 36,
+      "group": "G5",
+      "desc": "不可逆动作无双钥被拒",
+      "ok": true,
+      "evidence": "single key rejected: missing_key"
+    },
+    {
+      "id": 37,
+      "group": "G5",
+      "desc": "窗口内撤销免审批",
+      "ok": true,
+      "evidence": "inside window: no approval"
+    },
+    {
+      "id": 38,
+      "group": "G5",
+      "desc": "超窗撤销需新契约",
+      "ok": true,
+      "evidence": "outside window: approval required"
+    },
+    {
+      "id": 39,
+      "group": "G5",
+      "desc": "验证失败自动回滚并升级",
+      "ok": true,
+      "evidence": "rolled back on verify failure (content='orig')"
+    },
+    {
+      "id": 40,
+      "group": "G5",
+      "desc": "物理删除需 --hard + 双钥 + 确认串",
+      "ok": true,
+      "evidence": "all three gates required"
+    },
+    {
+      "id": 41,
+      "group": "G6",
+      "desc": "冻结后可续跑",
+      "ok": true,
+      "evidence": "resume after freeze done=True"
+    },
+    {
+      "id": 42,
+      "group": "G6",
+      "desc": "kill -9 后从 checkpoint 续跑",
+      "ok": true,
+      "evidence": "resumed from checkpoint after crash"
+    },
+    {
+      "id": 43,
+      "group": "G6",
+      "desc": "审批超时按策略处置",
+      "ok": true,
+      "evidence": "sla disposition abort"
+    },
+    {
+      "id": 44,
+      "group": "G6",
+      "desc": "DAG 环加载期报错",
+      "ok": true,
+      "evidence": "cycle rejected at validate"
+    },
+    {
+      "id": 45,
+      "group": "G6",
+      "desc": "并发锁拦住同目标第二实例",
+      "ok": true,
+      "evidence": "first=True second=False"
+    },
+    {
+      "id": 46,
+      "group": "G6",
+      "desc": "嵌套深度超限被拒",
+      "ok": true,
+      "evidence": "depth limit enforced"
+    },
+    {
+      "id": 47,
+      "group": "G6",
+      "desc": "步骤条件必须是判据（类型校验）",
+      "ok": true,
+      "evidence": "non-verdict condition rejected"
+    },
+    {
+      "id": 48,
+      "group": "G6",
+      "desc": "amend 保留历史记录",
+      "ok": true,
+      "evidence": "history entries=1"
+    },
+    {
+      "id": 49,
+      "group": "G7",
+      "desc": "三挂载点合并为 1 事件",
+      "ok": true,
+      "evidence": "3 mountpoints -> 1 incident, r2=merged"
+    },
+    {
+      "id": 50,
+      "group": "G7",
+      "desc": "父故障抑制子判据",
+      "ok": true,
+      "evidence": "child status=suppressed"
+    },
+    {
+      "id": 51,
+      "group": "G7",
+      "desc": "维护窗口零通报",
+      "ok": true,
+      "evidence": "in-window status=silenced"
+    },
+    {
+      "id": 52,
+      "group": "G7",
+      "desc": "抖动 10 分钟内 ≤2 条",
+      "ok": true,
+      "evidence": "notified 1 times in 10min"
+    },
+    {
+      "id": 53,
+      "group": "G7",
+      "desc": "告警/恢复成对且带持续时长",
+      "ok": true,
+      "evidence": "recovery status=recovered duration=99"
+    },
+    {
+      "id": 54,
+      "group": "G7",
+      "desc": "未确认触发升级",
+      "ok": true,
+      "evidence": "escalated=[{'incident': 'i1', 'age': 2000, 'level': 'escalated'}]"
+    },
+    {
+      "id": 55,
+      "group": "G7",
+      "desc": "注意力预算生效（超预算降摘要）",
+      "ok": true,
+      "evidence": "statuses=['notified', 'notified', 'notified', 'digested']"
+    },
+    {
+      "id": 56,
+      "group": "G7",
+      "desc": "静态状态页离线可打开",
+      "ok": true,
+      "evidence": "status page written"
+    },
+    {
+      "id": 57,
+      "group": "G8",
+      "desc": "26 类探针全部可用",
+      "ok": true,
+      "evidence": "26 kinds, undispatched=[]"
+    },
+    {
+      "id": 58,
+      "group": "G8",
+      "desc": "断言短路正确",
+      "ok": true,
+      "evidence": "short-circuit on first fail"
+    },
+    {
+      "id": 59,
+      "group": "G8",
+      "desc": "push 违约 1 周期内成立判据",
+      "ok": true,
+      "evidence": "push violation verdict state=sprout"
+    },
+    {
+      "id": 60,
+      "group": "G8",
+      "desc": "三种外部源可摄入",
+      "ok": true,
+      "evidence": "series=3"
+    },
+    {
+      "id": 61,
+      "group": "G8",
+      "desc": "监控插件文本协议可跑并解析 perfdata",
+      "ok": true,
+      "evidence": "parsed={'used': {'value': 42.0, 'unit': 'GB'}, 'warn': {'value': 80.0, 'unit': '%'}}"
+    },
+    {
+      "id": 62,
+      "group": "G8",
+      "desc": "三级降采样可查且数据连续",
+      "ok": true,
+      "evidence": "1h bucket count=3600"
+    },
+    {
+      "id": 63,
+      "group": "G8",
+      "desc": "标签超限被丢弃并计数",
+      "ok": true,
+      "evidence": "dropped=1"
+    },
+    {
+      "id": 64,
+      "group": "G8",
+      "desc": "采集开销达标（单轮<50ms）",
+      "ok": true,
+      "evidence": "cpu+mem collect 4.27ms"
+    },
+    {
+      "id": 65,
+      "group": "G9",
+      "desc": "60 个解码器全过样本",
+      "ok": true,
+      "evidence": "61 decoders, bad=[]"
+    },
+    {
+      "id": 66,
+      "group": "G9",
+      "desc": "五级处置可切换且自动解除",
+      "ok": true,
+      "evidence": "level set={'subject': '1.2.3.4', 'level': 'challenge', 'since': 1794999428.1186795, 'expires': 1795000328.1186795}"
+    },
+    {
+      "id": 67,
+      "group": "G9",
+      "desc": "回环/内网封禁被拒并留证",
+      "ok": true,
+      "evidence": "loopback/private refused"
+    },
+    {
+      "id": 68,
+      "group": "G9",
+      "desc": "攻击叙事字段完整（7 项）",
+      "ok": true,
+      "evidence": "story fields=['source', 'target', 'method', 'count', 'succeeded', 'action', 'duration']"
+    },
+    {
+      "id": 69,
+      "group": "G9",
+      "desc": "完整性变更 5s 内成立且可撤销",
+      "ok": true,
+      "evidence": "integrity changes=['/tmp/ao_audit_qmpi9ot5/watched.conf']"
+    },
+    {
+      "id": 70,
+      "group": "G9",
+      "desc": "rootkit 合成样本命中",
+      "ok": true,
+      "evidence": "rootkit indicators=['LD_PRELOAD points into tmp', 'crontab pipes curl to shell']"
+    },
+    {
+      "id": 71,
+      "group": "G9",
+      "desc": "合规 30 条带 control id",
+      "ok": true,
+      "evidence": "control ids=30"
+    },
+    {
+      "id": 72,
+      "group": "G9",
+      "desc": "合规回归即告警且分数曲线可见",
+      "ok": true,
+      "evidence": "score=0.0 failed=['C01', 'C02', 'C03', 'C04', 'C05', 'C06', 'C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'C13', 'C14', 'C15', 'C16', 'C17', 'C18', 'C19', 'C20', 'C21', 'C22', 'C23', 'C24', 'C25', 'C26', 'C27', 'C28', 'C29', 'C30']"
+    },
+    {
+      "id": 73,
+      "group": "G10",
+      "desc": "连跑两次 changed=0",
+      "ok": true,
+      "evidence": "second apply changed=False"
+    },
+    {
+      "id": 74,
+      "group": "G10",
+      "desc": "check 零副作用",
+      "ok": true,
+      "evidence": "check did not mutate"
+    },
+    {
+      "id": 75,
+      "group": "G10",
+      "desc": "漂移 1 周期内发现",
+      "ok": true,
+      "evidence": "drift detected=True"
+    },
+    {
+      "id": 76,
+      "group": "G10",
+      "desc": "自愈预算生效（超限只报不修）",
+      "ok": true,
+      "evidence": "second apply={'changed': False, 'reason_code': 'heal_budget_exhausted', 'verified': False}"
+    },
+    {
+      "id": 77,
+      "group": "G10",
+      "desc": "模板失败不落盘",
+      "ok": true,
+      "evidence": "failed apply left state=old"
+    },
+    {
+      "id": 78,
+      "group": "G10",
+      "desc": "包快照可还原",
+      "ok": true,
+      "evidence": "package snapshot={'format': 'ao-pkg-snapshot/1', 'packages': {'deb': [{'name': 'nginx', 'version': '1.0'}], 'rpm': [], 'apk': []}, 'hash': 'b7624dd0b68da969f11193484f3d68da5a80d198c3cdd5d641316b141050167e'}"
+    },
+    {
+      "id": 79,
+      "group": "G10",
+      "desc": "三系包管理适配",
+      "ok": true,
+      "evidence": "package manager adapter present"
+    },
+    {
+      "id": 80,
+      "group": "G10",
+      "desc": "20 模板全部可加载",
+      "ok": true,
+      "evidence": "templates=20"
+    },
+    {
+      "id": 81,
+      "group": "G11",
+      "desc": "断网+本地模型可用",
+      "ok": true,
+      "evidence": "local counsel ask={'ok': True, 'trace_id': 'ed62167e7fc31956', 'proposal': {'k': 1}, 'requires_double_sign': True}"
+    },
+    {
+      "id": 82,
+      "group": "G11",
+      "desc": "AI 提案永不自动执行",
+      "ok": true,
+      "evidence": "proposal={'ok': True, 'trace_id': '94309379856e82d1', 'proposal': {'k': 1}, 'requires_double_sign': True}"
+    },
+    {
+      "id": 83,
+      "group": "G11",
+      "desc": "schema 违规被丢弃",
+      "ok": true,
+      "evidence": "schema errors=['cause', 'confidence', 'evidence_refs', 'suggested_txn', 'risk']"
+    },
+    {
+      "id": 84,
+      "group": "G11",
+      "desc": "trace 可回放",
+      "ok": true,
+      "evidence": "trace replay ok"
+    },
+    {
+      "id": 85,
+      "group": "G11",
+      "desc": "证据包不含原文",
+      "ok": true,
+      "evidence": "evidence holds summaries only"
+    },
+    {
+      "id": 86,
+      "group": "G11",
+      "desc": "顾问进程无执行句柄",
+      "ok": true,
+      "evidence": "no exec/run/shell on Counsel"
+    },
+    {
+      "id": 87,
+      "group": "G11",
+      "desc": "关闭顾问后核心功能不受影响",
+      "ok": true,
+      "evidence": "disabled response={'ok': False, 'reason': 'counsel_disabled'}"
+    },
+    {
+      "id": 88,
+      "group": "G11",
+      "desc": "顾问输出必须引用证据 id",
+      "ok": true,
+      "evidence": "output cites evidence id e1"
+    },
+    {
+      "id": 89,
+      "group": "G12",
+      "desc": "未签名包拒收",
+      "ok": true,
+      "evidence": "unsigned install={'ok': False, 'reason_code': 'unsigned_pack_rejected', 'name': 'rules/x'}"
+    },
+    {
+      "id": 90,
+      "group": "G12",
+      "desc": "离线安装成功",
+      "ok": true,
+      "evidence": "offline install={'ok': True, 'name': 'rules/ok', 'version': '1.0', 'caps': ['read'], 'rollback_point': None}"
+    },
+    {
+      "id": 91,
+      "group": "G12",
+      "desc": "安装失败自动回滚",
+      "ok": true,
+      "evidence": "unsafe member rejected -> no install, nothing left behind"
+    },
+    {
+      "id": 92,
+      "group": "G12",
+      "desc": "锁文件可复现环境",
+      "ok": true,
+      "evidence": "lockfile packages=1"
+    },
+    {
+      "id": 93,
+      "group": "G12",
+      "desc": "第三方包无 exec",
+      "ok": true,
+      "evidence": "token scope=read (no exec)"
+    },
+    {
+      "id": 94,
+      "group": "G12",
+      "desc": "能力券 60s 过期后失效",
+      "ok": true,
+      "evidence": "token expires after 60s"
+    },
+    {
+      "id": 95,
+      "group": "G12",
+      "desc": "样本覆盖 100%",
+      "ok": true,
+      "evidence": "coverage={'total': 2, 'covered': 2, 'percent': 100.0, 'missing': []}"
+    },
+    {
+      "id": 96,
+      "group": "G12",
+      "desc": "六演练全通",
+      "ok": true,
+      "evidence": "drills=6/6"
+    },
+    {
+      "id": 97,
+      "group": "G13",
+      "desc": "预检任一红则发布按钮禁用（代码强制）",
+      "ok": true,
+      "evidence": "gate with red reverse tests -> pass=False"
+    },
+    {
+      "id": 98,
+      "group": "G13",
+      "desc": "nonce 出现在 e2e 日志中",
+      "ok": true,
+      "evidence": "nonce=1794999428237-01b0159de702e206"
+    },
+    {
+      "id": 99,
+      "group": "G13",
+      "desc": "发布回执含检查哈希且与日志一致",
+      "ok": true,
+      "evidence": "receipt checks_hash=6c9f38d9257ff4e862f3afc597871709"
+    },
+    {
+      "id": 100,
+      "group": "G13",
+      "desc": ".staging 崩溃后自动回滚",
+      "ok": true,
+      "evidence": "abort left no target changes"
+    },
+    {
+      "id": 101,
+      "group": "G13",
+      "desc": "撤回发布删 tag、回退版本、回执标 retracted",
+      "ok": true,
+      "evidence": "retract={'ok': True, 'version': '1.0.1', 'rolled_back_to': '1.0.0', 'log': 'ok'}"
+    },
+    {
+      "id": 102,
+      "group": "G13",
+      "desc": "自动更新验签失败即丢弃",
+      "ok": true,
+      "evidence": "update={'ok': False, 'reason': 'signature_invalid', 'rolled_back': True}"
+    },
+    {
+      "id": 103,
+      "group": "G13",
+      "desc": "更新失败可回退且旧版可用",
+      "ok": true,
+      "evidence": "old version intact after failed update ({'ok': False, 'reason': 'signature_invalid', 'rolled_back': True})"
+    },
+    {
+      "id": 104,
+      "group": "G13",
+      "desc": "网络层断言：聚合侧无法触发写",
+      "ok": true,
+      "evidence": "fabric refuses writes"
+    }
+  ]
+}
