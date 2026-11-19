@@ -231,6 +231,10 @@ pre{background:#0e1116;color:#e6e6e6;padding:12px;border-radius:8px;overflow:aut
   <div id=prev></div><div id=next></div><div id=detail class=mono></div>
 </div>
 <div class=card>
+  <div style="font-size:15px">GitHub 账号：<span id=acct class=mono></span></div>
+  <div id=acct2 class=mono style="font-size:13px;color:#555;margin-top:6px"></div>
+</div>
+<div class=card>
   <button onclick="pre()">预检 Preflight</button>
   <button id=pub class=primary onclick="act('/publish')" disabled>发布 Publish</button>
   <button onclick="act('/retract')">撤回 Retract</button>
@@ -256,6 +260,11 @@ function state(){return fetch('/api/state').then(r=>r.json()).then(s=>{
   document.getElementById('next').textContent='本次发: '+(s.next||'—');
   document.getElementById('detail').textContent=(s.next_detail||{}) ?
    ('闸门键: '+(s.next_detail.gate||'—')+' | 交付: '+(s.next_detail.deliver||'—')+' | 验收: '+(s.next_detail.acceptance||'—')):'';
+  var a=s.account||{};
+  document.getElementById('acct').textContent=a.bound?(a.slug||''):'未绑定';
+  document.getElementById('acct2').textContent=a.bound
+   ?('令牌: '+(a.token?'已配置':'未配置')+' | 令牌文件: '+(a.token_path||'—'))
+   :'在 config/account.json 填写 owner 与 repo';
 })}
 function pre(){log('=== preflight start ===');
   fetch('/api/preflight',{method:'POST',headers:{'X-AO-Token':AO_TOKEN}}).then(r=>r.json()).then(r=>{

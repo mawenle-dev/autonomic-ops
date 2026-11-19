@@ -405,8 +405,31 @@ class ReleaseStudio:
         return None
 
     # ---- one-click release: docs + signed assets + GitHub (append-only) ----
+    def account(self) -> dict:
+        """Bound GitHub account, from config first and local override second.
+
+        ``config/account.json`` ships with the product (non-secret). A local
+        ``.secrets/account.json`` may override it without changing the package.
+        """
+        for rel in ("config/account.json", os.path.join(".secrets", "account.json")):
+            path = os.path.join(self.root, rel)
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            owner = str(data.get("owner", "")).strip()
+            repo = str(data.get("repo", "")).strip()
+            if owner and repo:
+                return {"owner": owner, "repo": repo,
+                        "remote": str(data.get("remote", "")).strip(),
+                        "source": rel}
+        return {"owner": "", "repo": "", "remote": "", "source": ""}
+
     def repo_slug(self) -> tuple[str, str]:
-        """Parse owner/repo from the origin remote (ssh or https)."""
+        """Resolve owner/repo from the origin remote, then the bound account."""
         try:
             p = subprocess.run(["git", "remote", "get-url", "origin"], cwd=self.root,
                                capture_output=True, text=True)
@@ -415,7 +438,26 @@ class ReleaseStudio:
             url = ""
         import re as _re
         m = _re.search(r"github\.com[:/]([^/]+)/([^/.]+)", url)
-        return (m.group(1), m.group(2)) if m else ("", "")
+        if m:
+            return (m.group(1), m.group(2))
+        acct = self.account()
+        return (acct["owner"], acct["repo"])
+
+    def account_status(self) -> dict:
+        """What the UI needs: bound target plus whether a token is present."""
+        acct = self.account()
+        try:
+            from autonomic import github_publish as gp
+            has_token = bool(gp.load_token(self.root))
+        except Exception:  # noqa: BLE001
+            has_token = False
+        owner, repo = self.repo_slug()
+        return {"owner": owner, "repo": repo,
+                "slug": f"{owner}/{repo}" if owner and repo else "",
+                "bound": bool(owner and repo),
+                "token": has_token,
+                "token_path": os.path.join(self.root, ".secrets", "github_token"),
+                "source": acct["source"]}
 
     def publish_github(self, version: str, assets: list[str], body: str = "",
                        dry_run: bool = True) -> dict:
@@ -454,7 +496,8 @@ class ReleaseStudio:
         nxt = vs[idx + 1] if idx + 1 < len(vs) else None
         return {"current": cur, "previous": prev,
                 "next": nxt["version"] if nxt else None,
-                "next_detail": nxt, "total_versions": len(vs)}
+                "next_detail": nxt, "total_versions": len(vs),
+                "account": self.account_status()}
 
     def _seal_source(self) -> dict:
         """Seal the exact source tree that is about to be tagged as a release.

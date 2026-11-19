@@ -211,6 +211,18 @@ class TestStudio(unittest.TestCase):
         self.assertFalse(r["ok"])
         self.assertEqual(r["reason"], "hash_mismatch")
 
+    def test_account_binding_falls_back_to_config(self):
+        os.makedirs(os.path.join(self.tmp, "config"), exist_ok=True)
+        with open(os.path.join(self.tmp, "config", "account.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump({"owner": "acme", "repo": "ops",
+                       "remote": "https://github.com/acme/ops.git"}, fh)
+        self.assertEqual(self.studio.repo_slug(), ("acme", "ops"))
+        st = self.studio.state()
+        self.assertTrue(st["account"]["bound"])
+        self.assertEqual(st["account"]["slug"], "acme/ops")
+        self.assertFalse(st["account"]["token"])
+
 
 class TestHTTPGate(unittest.TestCase):
     """A GET must not publish; a POST without the session token must not either."""
