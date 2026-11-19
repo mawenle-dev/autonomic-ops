@@ -577,6 +577,7 @@ class ReleaseStudio:
             self._mark_version_doc(target, published=True)
             self._update_index_status(target, published=True)
             self._write_release_status()
+            self._write_readme_latest()
         with open(os.path.join(self.receipts_dir, f"{target}.json"), "w", encoding="utf-8") as fh:
             json.dump(receipt, fh, ensure_ascii=False, sort_keys=True)
         return receipt
@@ -645,6 +646,46 @@ class ReleaseStudio:
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines) + "\n")
 
+    def _write_readme_latest(self) -> None:
+        """Keep the repository landing page showing the latest release.
+
+        README is what visitors see first; a stale version block makes every
+        release invisible even when the release exists.
+        """
+        path = os.path.join(self.root, "README.md")
+        if not os.path.exists(path):
+            return
+        released = self.released()
+        cur = read_release_version(self.release_yaml())
+        st = self.state()
+        versions = sorted(released.keys(), key=_version_key, reverse=True)
+        acct = self.account()
+        if versions:
+            latest = versions[0]
+            info = released[latest]
+            url = (f"https://github.com/{acct['owner']}/{acct['repo']}"
+                   f"/releases/tag/v{latest}")
+            text = (f"> 最新发布：`{latest}`（{info.get('date', '')}） · "
+                    f"[Release]({url}) · [本版文档](release/docs/{latest}.md)\n"
+                    f">\n> 下一版本：`{st.get('next') or '—'}`"
+                    f"（`{(st.get('next_detail') or {}).get('gate', '—')}`）")
+        else:
+            text = "> 尚未发布正式版本。"
+        block = ("<!-- AO:LATEST:START -->\n" + text + "\n<!-- AO:LATEST:END -->")
+        with open(path, "r", encoding="utf-8") as fh:
+            body = fh.read()
+        if "<!-- AO:LATEST:START -->" in body and "<!-- AO:LATEST:END -->" in body:
+            pre, rest = body.split("<!-- AO:LATEST:START -->", 1)
+            _old, post = rest.split("<!-- AO:LATEST:END -->", 1)
+            body = pre + block + post
+        else:
+            lines = body.splitlines()
+            at = 1 if lines and lines[0].startswith("# ") else 0
+            lines.insert(at, "\n" + block + "\n")
+            body = "\n".join(lines)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(body)
+
     def _write_release_status(self) -> None:
         """Generate the single source of truth shown to readers.
 
@@ -700,6 +741,7 @@ class ReleaseStudio:
         self._mark_version_doc(version, published=False)
         self._update_index_status(version, published=False)
         self._write_release_status()
+        self._write_readme_latest()
         prev = receipt.get("previous")
         if prev:
             write_release_version(self.release_yaml(), prev)

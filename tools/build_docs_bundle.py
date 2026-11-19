@@ -16,8 +16,17 @@ TOP_FILES = [
     "DISCLAIMER.md", "SECURITY.md", "CONTRIBUTING.md", "LICENSE",
 ]
 
-TREES = [
-    "docs/human",
+TREES: list[str] = []
+
+USER_DOCS = [
+    "docs/human/能力对照.md",
+    "docs/human/发布状态.md",
+]
+
+VERSION_DOCS = [
+    "release/docs/INDEX.md",
+    "release/versions.yaml",
+    "release/release.yaml",
 ]
 
 
@@ -27,17 +36,11 @@ def collect(version: str) -> list[tuple[str, str]]:
         p = os.path.join(ROOT, name)
         if os.path.exists(p):
             items.append((p, name))
-    for tree in TREES:
-        base = os.path.join(ROOT, tree)
-        for dirpath, _dirs, names in os.walk(base):
-            for n in sorted(names):
-                if not n.endswith((".md", ".txt", ".png", ".jpg", ".svg")):
-                    continue
-                p = os.path.join(dirpath, n)
-                rel = os.path.relpath(p, ROOT).replace(os.sep, "/")
-                items.append((p, rel))
-    for name in (f"release/docs/{version}.md", "release/docs/INDEX.md",
-                 "release/versions.yaml", "release/release.yaml"):
+    for name in USER_DOCS:
+        p = os.path.join(ROOT, name)
+        if os.path.exists(p):
+            items.append((p, name))
+    for name in [f"release/docs/{version}.md", *VERSION_DOCS]:
         p = os.path.join(ROOT, name)
         if os.path.exists(p):
             items.append((p, name))
