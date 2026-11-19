@@ -666,9 +666,7 @@ class ReleaseStudio:
             url = (f"https://github.com/{acct['owner']}/{acct['repo']}"
                    f"/releases/tag/v{latest}")
             text = (f"> 最新发布：`{latest}`（{info.get('date', '')}） · "
-                    f"[Release]({url}) · [本版文档](release/docs/{latest}.md)\n"
-                    f">\n> 下一版本：`{st.get('next') or '—'}`"
-                    f"（`{(st.get('next_detail') or {}).get('gate', '—')}`）")
+                    f"[Release]({url}) · [本版文档](release/docs/{latest}.md)")
         else:
             text = "> 尚未发布正式版本。"
         block = ("<!-- AO:LATEST:START -->\n" + text + "\n<!-- AO:LATEST:END -->")
@@ -702,8 +700,7 @@ class ReleaseStudio:
                  "> 本文件由发布器写入，请勿手工修改。",
                  "",
                  f"- 当前版本：`{cur}`",
-                 f"- 待发布版本：`{st.get('next') or '—'}`",
-                 f"- 已回执发布：{len(versions)} 个"] 
+                 f"- 已回执发布：{len(versions)} 个"]
         if versions:
             latest = versions[0]
             info = released[latest]

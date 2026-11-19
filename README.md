@@ -2,8 +2,6 @@
 
 <!-- AO:LATEST:START -->
 > 最新发布：`1.0.1`（2026-11-19） · [Release](https://github.com/mawenle-dev/autonomic-ops/releases/tag/v1.0.1) · [本版文档](release/docs/1.0.1.md)
->
-> 下一版本：`1.0.2`（`fix_snapshot_state`）
 <!-- AO:LATEST:END -->
 
 > 自托管、可离线、可回滚的单机运维代理。

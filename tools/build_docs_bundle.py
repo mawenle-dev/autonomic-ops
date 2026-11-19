@@ -12,8 +12,8 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 TOP_FILES = [
-    "README.md", "README.en.md", "CHANGELOG.md", "KNOWN_GAPS.md",
-    "DISCLAIMER.md", "SECURITY.md", "CONTRIBUTING.md", "LICENSE",
+    "README.md", "README.en.md", "DISCLAIMER.md",
+    "SECURITY.md", "CONTRIBUTING.md", "LICENSE",
 ]
 
 TREES: list[str] = []
@@ -23,20 +23,21 @@ USER_DOCS = [
     "docs/human/发布状态.md",
 ]
 
-VERSION_DOCS = [
-    "release/docs/INDEX.md",
-    "release/versions.yaml",
-    "release/release.yaml",
-]
+VERSION_DOCS: list[str] = []
 
 
 def collect(version: str) -> list[tuple[str, str]]:
     items: list[tuple[str, str]] = []
+    skip = {"README.md", "README.en.md", "docs/human/发布状态.md"} if version == "1.0.0" else set()
     for name in TOP_FILES:
+        if name in skip:
+            continue
         p = os.path.join(ROOT, name)
         if os.path.exists(p):
             items.append((p, name))
     for name in USER_DOCS:
+        if name in skip:
+            continue
         p = os.path.join(ROOT, name)
         if os.path.exists(p):
             items.append((p, name))
