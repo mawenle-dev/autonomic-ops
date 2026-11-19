@@ -12,7 +12,7 @@ TOKEN="$(tr -d '\r\n' < .secrets/github_token)"
 # WSL regenerates /etc/hosts from the Windows hosts file at session start. If
 # GitHub is pinned to loopback there, add real addresses for this session only.
 if getent hosts github.com | grep -q '^127\.0\.0\.1'; then
-  printf '20.247.166.64 github.com\n20.205.243.168 api.github.com\n20.205.243.161 uploads.github.com\n' >> /etc/hosts
+  printf '20.27.177.113 github.com\n20.205.243.168 api.github.com\n20.205.243.161 uploads.github.com\n' >> /etc/hosts
 fi
 
 ASKPASS="$(mktemp)"
@@ -31,6 +31,6 @@ export GIT_ASKPASS="$ASKPASS"
 export GIT_TERMINAL_PROMPT=0
 
 git remote set-url origin https://x-access-token@github.com/mawenle-dev/autonomic-ops.git
-git -c credential.helper= push origin HEAD:main
-git -c credential.helper= push origin "$(git describe --tags --abbrev=0)"
+git -c credential.helper= -c http.version=HTTP/1.1 push origin HEAD:main
+git -c credential.helper= -c http.version=HTTP/1.1 push origin "$(git describe --tags --abbrev=0)"
 echo "pushed: $(git rev-parse --short HEAD) -> origin/main"
