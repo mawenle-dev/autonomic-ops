@@ -3,6 +3,10 @@
 本文件记录项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 自 1.0.1 起按《施工宪法》逐版施工：一版一件事，先有失败测试再实现，未发布版本标注状态，闸门键在发布时才开启。
 
+## [1.0.1] - 2026-11-19 (gate `fix_quarantine`)
+
+删除改为入仓；快照 trash 态；跨设备降级为复制
+
 ## [1.1.0] - 2026-11-18 (unreleased: constitution runtime)
 
 ### Added（运行时，不再是“只有模型”）

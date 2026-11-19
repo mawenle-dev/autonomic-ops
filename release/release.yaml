@@ -1,6 +1,6 @@
 # Current release gate state.
 # Only `version` is bumped at release time; gates open at or after their version.
-version: "1.0.0"
+version: "1.0.1"
 gates:
   fix_quarantine: false   # opens at 1.0.1
   fix_snapshot_state: false   # opens at 1.0.2
