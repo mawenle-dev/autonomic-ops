@@ -87,7 +87,7 @@ def build(spec_dir: str | None = None) -> dict:
     # release/: only manifests, receipts/channel and the update channel - NEVER portable/.
     copy_tree(os.path.join(ROOT, "release"), os.path.join(data, "release"),
               allow_dirs={"receipts", "channel", "updates"},
-              allow_files={"versions.yaml", "release.yaml", "manifest.json"})
+              allow_files={"versions.yaml", "release.yaml", "manifest.json", "released.json"})
     for src, dst in (("src", "src"), ("tests", "tests"), ("studio", "studio"),
                      ("config", "config"), ("docs", "docs")):
         copy_tree(os.path.join(ROOT, src), os.path.join(data, dst))

@@ -3,6 +3,33 @@
 > 规则：每次动代码/目录/发布流程，都在这里追加一条。写“改了什么、为什么、怎么验证的”，
 > 不要写“已完成”三个字就结束。
 
+## 2026-11-19（首次真实发布：1.0.1）
+
+### 发布前修复的两个门禁缺陷
+- **源码模式强制要求 MANIFEST**：`build_preflight()` 无条件添加 `manifest` 检查，
+  而便携包清单只存在于构建产物，源码仓库永远预检红。改为仅冻结模式检查
+  MANIFEST，源码模式检查 compile 与 unit tests；新增回归测试
+  `test_source_preflight_does_not_require_portable_manifest`。
+- **基线 1.0.0 被判“不在路线图”**：roadmap 检查只允许当前版本出现在
+  `versions.yaml`，而 1.0.0 是手工基线。改为：当前版本低于首条路线图版本且尚无
+  发布登记时，视为合法基线；其余情况仍判红。
+
+### 发布演练（隔离副本）
+- 将工作树复制到 `/tmp/ao_pubtest`，独立 `git init` 与提交，执行真实
+  `publish()`：预检 3 项全绿 → 生成 `v1.0.1` 标签 → 写入回执（3 项检查、
+  `checks_hash`、`seal`）→ 更新台账与频道；随后 `retract()` 验证回滚：
+  版本回到 1.0.0、标签删除、回执标 `retracted`、登记清理。
+- 演练证明发布与撤回链路可用，且不触碰真实仓库。
+
+### 真实发布
+- 先提交工作树（`1.1.0: runtime receipts, ...`），再执行真实发布：
+  - 预检：roadmap / compile / unit tests 全绿；
+  - 发布：`1.0.1`，回执 `release/receipts/1.0.1.json`，`status=published`，
+    `seal=7d2e9db87a1524d1`；
+  - 标签 `v1.0.1` 对齐到发布元数据提交；
+  - 当前版本 1.0.1，下一版 1.0.2（`fix_snapshot_state`）。
+- 未推送远端，未创建 GitHub Release。
+
 ## 2026-11-18（第二轮：可信度收口与更新通道）
 
 ### 1. 回执链校验

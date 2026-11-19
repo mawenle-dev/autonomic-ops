@@ -22,6 +22,9 @@ class TestStudio(unittest.TestCase):
         os.makedirs(os.path.join(dst, "channel"), exist_ok=True)
         for name in ("versions.yaml", "release.yaml"):
             shutil.copy2(os.path.join(src, name), os.path.join(dst, name))
+        # The repository's live release.yaml advances with each publish; these
+        # tests exercise the 1.0.0 baseline, so pin it explicitly.
+        core.write_release_version(os.path.join(dst, "release.yaml"), "1.0.0")
         with open(os.path.join(self.tmp, "CHANGELOG.md"), "w", encoding="utf-8") as fh:
             fh.write("# Changelog\n\n## [1.0.0] - old\n")
         # The seal needs at least one real source file; give the sandbox a tiny
