@@ -575,6 +575,7 @@ class ReleaseStudio:
             self._record_release(target)
             self._write_version_snapshot(target, st["next_detail"])
             self._mark_version_doc(target, published=True)
+            self._update_index_status(target, published=True)
             self._write_release_status()
         with open(os.path.join(self.receipts_dir, f"{target}.json"), "w", encoding="utf-8") as fh:
             json.dump(receipt, fh, ensure_ascii=False, sort_keys=True)
@@ -622,6 +623,25 @@ class ReleaseStudio:
         if not replaced:
             insert_at = 5 if len(lines) > 4 else len(lines)
             lines.insert(insert_at, f"- 发布状态：{status}")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+
+    def _update_index_status(self, version: str, published: bool) -> None:
+        """Reflect publish/retract in the version index row."""
+        path = os.path.join(self.root, "release", "docs", "INDEX.md")
+        if not os.path.exists(path):
+            return
+        with open(path, "r", encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        row = f"| {version} |"
+        status = "已发布" if published else "未发布"
+        for i, line in enumerate(lines):
+            if line.startswith(row):
+                cells = line.split("|")
+                if len(cells) >= 7:
+                    cells[-2] = f" {status} "
+                    lines[i] = "|".join(cells)
+                break
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines) + "\n")
 
@@ -678,6 +698,7 @@ class ReleaseStudio:
         # from released.json, otherwise the next publish hits already_released.
         self._forget_release(version)
         self._mark_version_doc(version, published=False)
+        self._update_index_status(version, published=False)
         self._write_release_status()
         prev = receipt.get("previous")
         if prev:
