@@ -154,7 +154,7 @@
       "group": "G3",
       "desc": "explain 四命令可用且 P95<200ms",
       "ok": true,
-      "evidence": "4 keys, avg 0.01ms"
+      "evidence": "4 keys, avg 0.00ms"
     },
     {
       "id": 23,
@@ -203,7 +203,7 @@
       "group": "G4",
       "desc": "影子预测误差 <10%",
       "ok": true,
-      "evidence": "error=0.0"
+      "evidence": "files=3 error=0.0"
     },
     {
       "id": 30,
@@ -280,7 +280,7 @@
       "group": "G5",
       "desc": "物理删除需 --hard + 双钥 + 确认串",
       "ok": true,
-      "evidence": "all three gates required"
+      "evidence": "registered=True refused=True dual_result=dual_key_not_configured: enable constitution.two_key first"
     },
     {
       "id": 41,
@@ -448,7 +448,7 @@
       "group": "G8",
       "desc": "采集开销达标（单轮<50ms）",
       "ok": true,
-      "evidence": "cpu+mem collect 3.84ms"
+      "evidence": "cpu+mem collect 0.30ms"
     },
     {
       "id": 65,
@@ -462,7 +462,7 @@
       "group": "G9",
       "desc": "五级处置可切换且自动解除",
       "ok": true,
-      "evidence": "level set={'subject': '1.2.3.4', 'level': 'challenge', 'since': 1795000791.0431907, 'expires': 1795001691.0431907}"
+      "evidence": "level set={'subject': '1.2.3.4', 'level': 'challenge', 'since': 1795008077.548054, 'expires': 1795008977.548054}"
     },
     {
       "id": 67,
@@ -483,7 +483,7 @@
       "group": "G9",
       "desc": "完整性变更 5s 内成立且可撤销",
       "ok": true,
-      "evidence": "integrity changes=['/tmp/ao_audit_4rmhms3l/watched.conf']"
+      "evidence": "integrity changes=['/tmp/ao_audit_j7q8cslu/watched.conf']"
     },
     {
       "id": 70,
@@ -567,14 +567,14 @@
       "group": "G11",
       "desc": "断网+本地模型可用",
       "ok": true,
-      "evidence": "local counsel ask={'ok': True, 'trace_id': 'ac68145ab80f8af6', 'proposal': {'k': 1}, 'requires_double_sign': True}"
+      "evidence": "local counsel ask={'ok': True, 'trace_id': '93d9df6668409f6e', 'proposal': {'k': 1}, 'requires_double_sign': True}"
     },
     {
       "id": 82,
       "group": "G11",
       "desc": "AI 提案永不自动执行",
       "ok": true,
-      "evidence": "proposal={'ok': True, 'trace_id': '713e3b44d4722d4e', 'proposal': {'k': 1}, 'requires_double_sign': True}"
+      "evidence": "proposal={'ok': True, 'trace_id': '0a99b40b23f2ccbb', 'proposal': {'k': 1}, 'requires_double_sign': True}"
     },
     {
       "id": 83,
@@ -672,7 +672,7 @@
       "group": "G12",
       "desc": "六演练全通",
       "ok": true,
-      "evidence": "drills=6/6"
+      "evidence": "unwired=0/6 wired=6/6"
     },
     {
       "id": 97,
@@ -686,14 +686,14 @@
       "group": "G13",
       "desc": "nonce 出现在 e2e 日志中",
       "ok": true,
-      "evidence": "nonce=1795000791156-eeae7123265b5b23"
+      "evidence": "nonce=1795008077558-55da4c10571bdaa1"
     },
     {
       "id": 99,
       "group": "G13",
       "desc": "发布回执含检查哈希且与日志一致",
       "ok": true,
-      "evidence": "receipt checks_hash=6c9f38d9257ff4e862f3afc597871709"
+      "evidence": "refused_empty=True checks=1 hash_match=True"
     },
     {
       "id": 100,
@@ -707,7 +707,7 @@
       "group": "G13",
       "desc": "撤回发布删 tag、回退版本、回执标 retracted",
       "ok": true,
-      "evidence": "retract={'ok': True, 'version': '1.0.1', 'rolled_back_to': '1.0.0', 'log': 'ok'}"
+      "evidence": "retract={'ok': True, 'version': '1.0.1', 'rolled_back_to': '1.0.0', 'released_registry_clean': True, 'log': 'ok'}"
     },
     {
       "id": 102,

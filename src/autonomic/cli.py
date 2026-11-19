@@ -277,6 +277,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("capabilities", help="list built-in probe kinds, reason codes, control ids")
     p.add_argument("--kind", choices=["probes", "reasons", "controls", "templates"], default="probes")
     sub.add_parser("studio", help="launch AO Release Studio web console")
+    p = sub.add_parser("constitution", help="show covenant, budget usage, receipt chain state")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
     return parser
 
 
@@ -341,6 +343,24 @@ def main(argv: Optional[list] = None) -> int:
             print(f"\n{'PASS' if result.get('ok') else 'FAIL'}  checks={len(result['checks'])} "
                   f"failed={result.get('failed')} warnings={result.get('warnings', 0)}")
         return 0 if result.get("ok") else 1
+
+    if args.command == "constitution":
+        from .runtime import ConstitutionRuntime
+        st = ConstitutionRuntime(config).status()
+        if args.json:
+            _print_json(st)
+        else:
+            cov = st["covenant"]
+            bud = st["budget"]
+            rec = st["receipts"]
+            chain = rec.get("chain") or {}
+            print(f"covenant  {cov['id']}  scope={cov['scope']}  expires={time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(cov['expiry']))}")
+            for dim in ("bytes", "files", "actions", "blast", "rate"):
+                print(f"budget    {dim:<8} used={bud['used'].get(dim, 0):>10} cap={bud['caps'].get(dim, 0)}")
+            print(f"receipts  count={rec.get('count', 0)} chain_ok={chain.get('ok')} last={rec.get('last', {}).get('hash', '')[:16]}")
+            print(f"negative  {st['negative']}")
+            print(f"two_key   enabled={st['two_key']['enabled']}")
+        return 0 if (st["receipts"].get("chain") or {}).get("ok", True) else 1
 
     if args.command == "deploy":
         from .bootstrap import Deployer

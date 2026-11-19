@@ -243,6 +243,8 @@ class ActionResult:
     skipped: bool = False
     output: str = ""
     duration: float = 0.0
+    receipt_id: str = ""
+    receipt_hash: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)

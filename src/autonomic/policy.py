@@ -47,6 +47,7 @@ DEFAULT_RISK = {
     "firewall.ban_ip": "high",
     "firewall.unban_ip": "medium",
     "file.delete": "high",
+    "file.delete.hard": "critical",
     "system.config.modify": "high",
     "package.install": "high",
     "shell.exec": "high",

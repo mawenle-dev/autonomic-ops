@@ -83,10 +83,10 @@ PYTHONPATH=src python3 -m autonomic.cli -c config/config.selftest.yaml serve
 面板就是一个模块：`src/autonomic/dashboard.py`。
 
 - **改外观**：直接编辑文件里的 `HTML` 常量（纯 HTML/CSS/JS，无构建步骤）。
-- **加只读接口**：在 `Handler.do_GET` 的 `mapping` 里加一项 `"你的名字": ("ipc命令", {参数})` 即可，前端 `fetch("/api/你的名字")`。
+- **加只读接口**：在 `Handler.do_GET` 的 `mapping` 中增加 `"<名称>": ("ipc命令", {参数})`，前端使用 `fetch("/api/<名称>")`。
 - **加写操作**：**不建议**。如果确实需要，务必：默认只绑回环、强制 token、加 CSRF 防护，并且复用 daemon 现有的审批管线，**绝不在面板里直接调 executor**。
 
-如果你只是想要监控数据，也可以不用面板，直接用：
+若仅需监控数据，可不使用面板，直接执行：
 
 ```bash
 sudo autonomic-ops status --json | jq .

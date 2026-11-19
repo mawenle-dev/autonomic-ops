@@ -69,7 +69,15 @@ class ProveHarness:
 
     def run_all(self, fns: dict[str, Callable[[], dict]]) -> dict:
         for name in DRILLS:
-            fn = fns.get(name, lambda: {"ok": True, "detail": "no-op"})
+            fn = fns.get(name)
+            if fn is None:
+                # A drill that was never wired is NOT a passing drill. Earlier
+                # this defaulted to {"ok": True}, which made the six-drill
+                # report green without ever executing anything.
+                res = {"drill": name, "ok": False, "nonce": self.nonce, "duration": 0.0,
+                       "detail": "not implemented: no drill function supplied"}
+                self.results[name] = res
+                continue
             self.run_drill(name, fn)
         passed = sum(1 for r in self.results.values() if r["ok"])
         report = {"nonce": self.nonce, "results": self.results,

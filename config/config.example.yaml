@@ -217,6 +217,24 @@ codegen:
   sandbox_cpu_seconds: 10
   sandbox_memory_mb: 256
   allow_network_in_sandbox: false
+
+# Constitution runtime (FVC-R): every executed action gets a receipt and every
+# action pays from a persistent five-dimension budget. -1 = unlimited,
+# 0 = forbid that dimension entirely.
+constitution:
+  scope: ""                        # 留空 = host:<hostname>
+  covenant_hours: 24
+  budget_window_seconds: 3600
+  budget:
+    bytes: 10737418240             # 10 GiB per window
+    files: 2000
+    actions: 2000
+    blast: 30
+    rate: 200
+  two_key:
+    enabled: false                 # 开启后不可逆动作必须双签
+    policy_key: ""                 # 必须与 operator_key 不在同一目录
+    operator_key: ""
   templates_dir: ""
   require_approval_for_system_files: true
   core_manifest: ""

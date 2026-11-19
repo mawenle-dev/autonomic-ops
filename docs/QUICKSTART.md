@@ -12,7 +12,7 @@ git clone <your-repo-url> autonomic-ops && cd autonomic-ops
 sudo bash scripts/install.sh --prefix /opt/autonomic-ops --no-service --non-interactive
 ```
 
-安装器不启动守护进程，方便你先观察。若只想做假根校验：`--simulate`。
+安装器不启动守护进程，便于先观察运行效果。若仅需假根校验，使用 `--simulate`。
 
 ## 2. 启动守护进程 + 看面板
 

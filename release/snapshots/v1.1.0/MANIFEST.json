@@ -1,0 +1,73 @@
+{
+  "format": "ao-version-snapshot/1",
+  "version": "1.1.0",
+  "created_at": "2026-11-18T21:26:34",
+  "note": "runtime hardening + update channel + neutral docs",
+  "files": [
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "db8a9fb63c29118c0de54201bf57c8b3e8bd306db45e25f4a6090e7e6239232b",
+      "size": 16890
+    },
+    {
+      "path": "docs/handover/AI_HANDOVER.md",
+      "sha256": "4b8d6b82645c7ee6c7a5b4ea6dcf0b42de8ccbc39f232dba26de150bc6b55938",
+      "size": 4683
+    },
+    {
+      "path": "docs/handover/交付说明-完整版.md",
+      "sha256": "90bfb4e17988e03604d9434daa5237739791b41c620e7c5ee327987d65311083",
+      "size": 38469
+    },
+    {
+      "path": "docs/handover/本次完成报告.md",
+      "sha256": "5b09b69d7b08791ff60cf911e9048b84bad706f3e3086e6153185d61cd3f31db",
+      "size": 4901
+    },
+    {
+      "path": "docs/human/README.md",
+      "sha256": "96832d772876b0f8d394f7532997e47b6c5bf68d03028d378e2c980c1e117c87",
+      "size": 3502
+    },
+    {
+      "path": "docs/human/发布操作.md",
+      "sha256": "92acec512172a851ba80ca48ad6ed852c999b246e0b0fb2afd088a14fb2e7bac",
+      "size": 4146
+    },
+    {
+      "path": "docs/human/版本规划.md",
+      "sha256": "4ddf0e9c4cb82114a8882b14a6614935a3a002f7183447ad92c825dbc0c2b61d",
+      "size": 2489
+    },
+    {
+      "path": "docs/human/能力对照.md",
+      "sha256": "da13cb4d84f95525a01ac5b4698fd4f032284cb50121b66ef12e4c7ae706eca3",
+      "size": 2907
+    },
+    {
+      "path": "docs/memory/DECISIONS.md",
+      "sha256": "1b9c818a96d2ef6b4c9d9a77ae6358806af2d52d0070b6a16c87d319e532c187",
+      "size": 3476
+    },
+    {
+      "path": "docs/memory/PROJECT_MEMORY.md",
+      "sha256": "673c63c846f909cd2aab5eb075546b275cd4cbf56408221f613e961ad8090ebb",
+      "size": 7228
+    },
+    {
+      "path": "docs/memory/WORKLOG.md",
+      "sha256": "bf455088060e6374302f90ff078d1dfd4d7aa32f62b68dee2279caa8b2cd9da3",
+      "size": 6602
+    },
+    {
+      "path": "release/release.yaml",
+      "sha256": "c362f4a0386783fd4c8f53d0a223fe4ce5805b88e4582c014bd9cd3591c62420",
+      "size": 5343
+    },
+    {
+      "path": "release/versions.yaml",
+      "sha256": "851e6c2da5c38e8c82673dc8c4346c58af5ca03930f1f0a0d3962ce24d80dd92",
+      "size": 38216
+    }
+  ]
+}

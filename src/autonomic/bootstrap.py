@@ -119,7 +119,8 @@ class Deployer:
         if os.path.exists(root):
             shutil.rmtree(root, ignore_errors=True)
         shutil.copytree(self.project_root, root, ignore=shutil.ignore_patterns(
-            "data", "logs", ".git", "__pycache__", "*.pyc", ".tmp-tool-results"))
+            "data", "logs", ".git", "__pycache__", "*.pyc", ".tmp-tool-results",
+            ".tools", ".vm", ".secrets", "dist", "portable"))
         steps.append({"step": "package", "ok": True, "detail": f"copied project tree to simulated remote {root}"})
         # Install into an isolated prefix, still on this host, no service start.
         script = os.path.join(root, "scripts", "install.sh")
@@ -213,7 +214,8 @@ class Deployer:
         try:
             with tarfile.open(out, "w:gz") as tar:
                 for entry in sorted(os.listdir(self.project_root)):
-                    if entry in (".git", "data", "logs", "__pycache__", ".tmp-tool-results"):
+                    if entry in (".git", "data", "logs", "__pycache__", ".tmp-tool-results",
+                                 ".tools", ".vm", ".secrets", "dist", "portable"):
                         continue
                     path = os.path.join(self.project_root, entry)
                     if os.path.isfile(path) and entry.endswith(".pyc"):

@@ -1,6 +1,6 @@
 # 首次发布到 GitHub
 
-> 这份文档写给**第一次在 GitHub 上发项目**的维护者，尽量不省略步骤。命令中的 `<用户名>`、`<仓库名>` 需要换成你自己的。
+> 本文面向首次在 GitHub 发布项目的维护者，步骤尽量完整。命令中的 `<用户名>`、`<仓库名>` 为占位符，需替换为实际值。
 
 ## 0. 当前仓库状态
 
@@ -83,7 +83,7 @@ grep -rn "YOUR_GITHUB_USERNAME\|<your-repo-url>\|<用户名>\|<仓库名>" \
 
 ```bash
 grep -rl "YOUR_GITHUB_USERNAME" --exclude-dir=.git . \
-  | xargs sed -i "s/YOUR_GITHUB_USERNAME/<你的用户名>/g"
+  | xargs sed -i "s/YOUR_GITHUB_USERNAME/<用户名>/g"
 ```
 
 `<your-repo-url>` 换成 `https://github.com/<用户名>/<仓库名>.git`。
@@ -114,17 +114,17 @@ git diff --cached | grep -iE "api[_-]?key|secret|password|BEGIN .*PRIVATE KEY|to
 ### 第 1 步：在 GitHub 建空仓库
 
 1. 登录 GitHub，右上角 `+` → `New repository`。
-2. `Repository name` 填 `autonomic-ops`（或你喜欢的名字）；`Description` 可填 "An unattended, policy-gated self-healing ops agent for single Linux hosts"。
+2. `Repository name` 填 `autonomic-ops`（或自定义名称）；`Description` 可填 "An unattended, policy-gated self-healing ops agent for single Linux hosts"。
 3. 选 `Public`；**不要勾选** `Add a README file`、`Add .gitignore`、`Choose a license`——本地已经有了，勾了会和首次推送冲突。
 4. 点 `Create repository`，复制页面上的 HTTPS 地址（`https://github.com/<用户名>/<仓库名>.git`）。
 
 ### 第 2 步：本地提交并推送
 
 ```bash
-cd <你的仓库目录>             # 例如 ~/autonomic-ops；用相对写法，不要在公开文档里写本机路径
+cd <仓库目录>                 # 例如 ~/autonomic-ops；不要写入本机绝对路径
 
-git config user.name "你的名字"
-git config user.email "你的邮箱"       # 建议用 GitHub 账号绑定的邮箱
+git config user.name "<GitHub 用户名>"
+git config user.email "<GitHub 绑定邮箱>"
 
 git add .
 git status                             # 再确认一次暂存内容
@@ -138,8 +138,8 @@ git push -u origin main
 
 GitHub **不接受账号密码**推送，二选一：
 
-- **Personal Access Token（最简单）**：GitHub → `Settings` → `Developer settings` → `Personal access tokens` → `Fine-grained tokens` → 生成，给目标仓库 `Contents: Read and write` 权限；推送时用户名填 GitHub 用户名，密码栏粘贴 token。Windows 上 Git Credential Manager 会帮你缓存。
-- **SSH key**：`ssh-keygen -t ed25519 -C "你的邮箱"`，把 `~/.ssh/id_ed25519.pub` 加到 GitHub 的 `SSH and GPG keys`，然后把远端地址改成 `git@github.com:<用户名>/<仓库名>.git`。
+- **Personal Access Token（最简单）**：GitHub → `Settings` → `Developer settings` → `Personal access tokens` → `Fine-grained tokens` → 生成，给目标仓库 `Contents: Read and write` 权限；推送时用户名填 GitHub 用户名，密码栏粘贴 token。Windows 上 Git Credential Manager 会缓存凭据。
+- **SSH key**：`ssh-keygen -t ed25519 -C "<邮箱>"`，将 `~/.ssh/id_ed25519.pub` 加入 GitHub 的 `SSH and GPG keys`，再将远端地址改为 `git@github.com:<用户名>/<仓库名>.git`。
 
 ### 第 4 步：确认发布成功
 

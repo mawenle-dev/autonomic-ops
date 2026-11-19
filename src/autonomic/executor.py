@@ -39,6 +39,7 @@ from .config import Config
 from .errors import PolicyDenied
 from .models import ActionRequest, ActionResult, Finding, Priority, Task, TaskKind
 from .policy import PendingStore, PolicyEngine
+from .runtime import ConstitutionRuntime
 
 # action -> handler name is 1:1; the mapping lives in ActionExecutor.register
 HandlerFn = Callable[[ActionRequest, "ExecContext"], ActionResult]
@@ -69,6 +70,11 @@ class ActionExecutor:
         self._restarts: dict[str, list[float]] = {}
         self._lock = threading.Lock()
         self.max_restarts_per_hour = int(config.get("remediation.max_restarts_per_hour", 5) or 5)
+        # Constitution runtime: covenant + persistent budget + receipt journal.
+        # It is created once per process so the budget cannot be reset by
+        # simply issuing a new request.
+        self.runtime = ConstitutionRuntime(config, self._log)
+        self.ctx.runtime = self.runtime
         self._register_builtins()
 
     def register(self, action: str, handler: HandlerFn) -> None:
@@ -90,6 +96,7 @@ class ActionExecutor:
         decision = self.ctx.policy.decide(request, approved_by=approved_by)
         if not decision.allowed:
             detail = f"policy denied: {decision.reason}"
+            self.runtime.record_refusal(request, "whitelist_miss", detail)
             if self.ctx.audit:
                 self.ctx.audit.record(
                     actor=request.source, trigger=request.rule_id or request.id, action=request.action,
@@ -101,8 +108,25 @@ class ActionExecutor:
         with self._lock:
             handler = self._handlers.get(request.action)
         if handler is None:
+            self.runtime.record_refusal(request, "whitelist_miss",
+                                        f"no handler for {request.action}")
             return ActionResult(False, request.action, detail=f"no handler registered for '{request.action}'",
                                 skipped=True, duration=time.time() - started)
+
+        # Constitution gate #1: budget + covenant + dual key, checked BEFORE
+        # the handler can touch anything. A refusal is recorded in the
+        # negative ledger so "what could have been done but was not" survives.
+        allowed, why = self.runtime.precheck(request, decision)
+        if not allowed:
+            detail = f"constitution refused: {why}"
+            if self.ctx.audit:
+                self.ctx.audit.record(
+                    actor=request.source, trigger=request.rule_id or request.id, action=request.action,
+                    target=request.target, params=request.params, result=detail,
+                    extra={"decision": decision.to_dict(), "constitution": self.runtime.status()},
+                )
+            return ActionResult(False, request.action, detail=detail, skipped=True,
+                                duration=time.time() - started)
 
         self._log.info("execute action=%s target=%s risk=%s approved_by=%s dry_run=%s",
                        request.action, request.target, decision.risk, approved_by or "-",
@@ -115,6 +139,13 @@ class ActionExecutor:
             self._log.error("action %s failed: %s", request.action, exc, exc_info=True)
             result = ActionResult(False, request.action, detail=f"{type(exc).__name__}: {exc}")
         result.duration = time.time() - started
+
+        # Constitution gate #2: every executed action gets a receipt, including
+        # failures (the receipt says ok=false). Only policy/budget refusals are
+        # absent from the receipt journal; they live in the negative ledger.
+        receipt_entry = self.runtime.finalize(request, decision, result)
+        receipt_id = result.receipt_id
+        receipt_hash = result.receipt_hash
         if self.ctx.audit:
             self.ctx.audit.record(
                 actor=request.source, trigger=request.rule_id or request.id, action=request.action,
@@ -128,6 +159,9 @@ class ActionExecutor:
                     "simulated": result.skipped,
                     "finding_id": request.finding_id,
                     "request_id": request.id,
+                    "receipt_id": receipt_id,
+                    "receipt_hash": receipt_hash,
+                    "receipt_seq": (receipt_entry or {}).get("seq"),
                 },
             )
         return result
@@ -145,6 +179,7 @@ class ActionExecutor:
         self.register("firewall.ban_ip", _h_ban_ip)
         self.register("firewall.unban_ip", _h_unban_ip)
         self.register("file.delete", _h_file_delete)
+        self.register("file.delete.hard", _h_file_delete_hard)
         self.register("shell.exec", _h_shell)
         self.register("plugin.install", _h_plugin_install)
         self.register("plugin.action", _h_plugin_action)
@@ -234,7 +269,9 @@ def _verify_service(spec: dict) -> tuple[bool, str]:
     if not unit and spec.get("name"):
         checks.append((f"process {spec['name']}", _process_alive(spec)))
     if not checks:
-        return True, "no verification target configured (restart accepted without health check)"
+        # A restart we cannot verify is *not* a verified restart. Returning
+        # True here used to let an unconfigured service pass silently.
+        return False, "no verification target configured (restart unverified)"
     for label, ok in checks:
         if not ok:
             return False, f"post-restart verification failed: {label} not healthy"
@@ -591,8 +628,9 @@ def _h_log_rotate(req: ActionRequest, ctx: ExecContext) -> ActionResult:
     log_dir = str(req.params.get("log_dir") or ctx.config.get("agent.log_dir"))
     max_bytes = util.parse_int(req.params.get("max_bytes"), int(ctx.config.get("agent.log_max_bytes", 10 * 1024 * 1024)),
                                1024, 1024 ** 3)
-    keep = util.parse_int(req.params.get("backups"), int(ctx.config.get("agent.log_backups", 5)), 1, 50)
+    keep = util.parse_int(req.params.get("backups"), int(ctx.config.get("agent.log_backups", 5)), 0, 50)
     rotated = []
+    failed = 0
     if ctx.dry_run or req.dry_run:
         return ActionResult(True, req.action, detail=f"DRY-RUN: would rotate logs in {log_dir}", skipped=True)
     for name in os.listdir(log_dir):
@@ -607,23 +645,41 @@ def _h_log_rotate(req: ActionRequest, ctx: ExecContext) -> ActionResult:
         stamp = util.utc_stamp()
         target = f"{path}.{stamp}"
         try:
+            # rename is atomic on the same filesystem and costs no extra space,
+            # then re-create the live file. Metadata is preserved by copy2.
             shutil.copy2(path, target)
             open(path, "w").close()
             rotated.append(target)
         except OSError as exc:
+            failed += 1
             ctx.log.warning("log rotate failed for %s: %s", path, exc)
+
+    # Retention: stale generations go to the quarantine vault (never unlink).
+    # keep=0 means "keep none", which used to delete nothing because of
+    # Python's `[:-0]` slice semantics -- fixed by computing the count first.
+    families: dict[str, list[str]] = {}
     for name in os.listdir(log_dir):
-        path = os.path.join(log_dir, name)
-        if ".log." in name:
-            siblings = sorted([os.path.join(log_dir, n) for n in os.listdir(log_dir)
-                               if n.startswith(name.split(".log.")[0] + ".log.")])
-            for stale in siblings[:-keep]:
-                try:
-                    os.unlink(stale)
-                except OSError:
-                    pass
-    return ActionResult(True, req.action, detail=f"rotated {len(rotated)} log files in {log_dir}",
-                        changed_files=rotated, verified=True)
+        if ".log." not in name:
+            continue
+        base = name.split(".log.")[0] + ".log."
+        families.setdefault(base, []).append(os.path.join(log_dir, name))
+    stale_all: list[str] = []
+    for base, siblings in families.items():
+        siblings.sort()
+        drop = max(0, len(siblings) - keep)
+        stale_all.extend(siblings[:drop])
+    if stale_all:
+        try:
+            ctx.backup.quarantine(stale_all, label="log-retention",
+                                  meta={"request_id": req.id, "reason": "log retention"})
+        except Exception as exc:  # noqa: BLE001 - never delete without an undo handle
+            failed += len(stale_all)
+            ctx.log.error("log retention quarantine failed; keeping files: %s", exc)
+    return ActionResult(failed == 0, req.action,
+                        detail=f"rotated {len(rotated)} log files in {log_dir}; "
+                               f"retained {len(stale_all)} stale generation(s) in quarantine; "
+                               f"failures={failed}",
+                        changed_files=rotated, verified=failed == 0)
 
 
 def _h_ban_ip(req: ActionRequest, ctx: ExecContext) -> ActionResult:
@@ -671,6 +727,39 @@ def _h_file_delete(req: ActionRequest, ctx: ExecContext) -> ActionResult:
     snap = ctx.backup.snapshot([path], label="file-delete", meta={"request_id": req.id}, remove_originals=True)
     return ActionResult(True, req.action, detail=f"deleted {path}; snapshot={snap['id']}",
                         changed_files=[path], rollback_point=snap["id"], verified=snap["complete"])
+
+
+def _h_file_delete_hard(req: ActionRequest, ctx: ExecContext) -> ActionResult:
+    """Physical delete: requires --hard semantics, dual-key signatures and the
+    exact confirmation string. There is no undo by definition, so the receipt
+    records undo.kind=none/irreversible.
+    """
+    path = str(req.target or req.params.get("path") or "")
+    if str(req.params.get("confirm") or "") != "DELETE":
+        return ActionResult(False, req.action,
+                            detail="physical delete requires confirm=DELETE", skipped=True)
+    runtime = getattr(ctx, "runtime", None)
+    if runtime is None or runtime.two_key is None:
+        return ActionResult(False, req.action,
+                            detail="dual_key_not_configured: enable constitution.two_key first",
+                            skipped=True)
+    if not req.params.get("dual"):
+        return ActionResult(False, req.action, detail="dual signatures missing", skipped=True)
+    if not path:
+        return ActionResult(False, req.action, detail="no path supplied")
+    if ctx.policy.is_forbidden_path(path):
+        return ActionResult(False, req.action, detail=f"refusing forbidden path {path}", skipped=True)
+    if not os.path.exists(path):
+        return ActionResult(True, req.action, detail=f"{path} does not exist", verified=True)
+    if os.path.isdir(path) or os.path.islink(path):
+        return ActionResult(False, req.action,
+                            detail="physical delete accepts regular files only")
+    try:
+        os.unlink(path)
+    except OSError as exc:
+        return ActionResult(False, req.action, detail=f"unlink failed: {exc}")
+    return ActionResult(True, req.action, detail=f"physically deleted {path}",
+                        changed_files=[path], verified=True)
 
 
 def _h_shell(req: ActionRequest, ctx: ExecContext) -> ActionResult:

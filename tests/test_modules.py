@@ -181,6 +181,14 @@ class TestProve(unittest.TestCase):
         h = prove.ProveHarness(nonce="abc123")
         rep = h.run_all({})
         self.assertEqual(rep["nonce"], "abc123")
+        # A drill with no supplied function must be reported as NOT implemented.
+        self.assertFalse(rep["all_ok"])
+        self.assertIn("not implemented", rep["results"]["disk-pressure"]["detail"])
+
+    def test_nonce_in_drill_report_when_all_supplied(self):
+        h = prove.ProveHarness(nonce="abc123")
+        fns = {name: (lambda: {"ok": True, "detail": "ran"}) for name in prove.DRILLS}
+        rep = h.run_all(fns)
         self.assertTrue(rep["all_ok"])
 
     def test_sample_coverage(self):

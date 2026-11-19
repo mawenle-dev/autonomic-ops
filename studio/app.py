@@ -11,6 +11,7 @@ Run:  python -m studio.app [--root /path/to/repo] [--no-browser] [--port 8765]
 from __future__ import annotations
 
 import argparse
+import secrets
 import json
 import os
 import sys
@@ -29,14 +30,14 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 try:  # frozen / script
-    from core import Preflight, ReleaseStudio  # type: ignore
+    from core import Preflight, ReleaseStudio, build_preflight  # type: ignore
 except ImportError:  # package
-    from .core import Preflight, ReleaseStudio  # type: ignore
+    from .core import Preflight, ReleaseStudio, build_preflight  # type: ignore
 
 
-def _server(studio: ReleaseStudio, pf: Preflight):
+def _server(studio: ReleaseStudio, pf: Preflight, token: str):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "AOReleaseStudio/1.0"
+        server_version = "AOReleaseStudio/1.1"
 
         def log_message(self, *a):
             pass
@@ -50,11 +51,72 @@ def _server(studio: ReleaseStudio, pf: Preflight):
             self.end_headers()
             self.wfile.write(data)
 
+        def _origin_ok(self) -> bool:
+            """Same-origin guard: a random web page cannot POST to us."""
+            origin = self.headers.get("Origin") or ""
+            if origin:
+                return origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:")
+            referer = self.headers.get("Referer") or ""
+            if referer:
+                return referer.startswith("http://127.0.0.1:") or referer.startswith("http://localhost:")
+            return True  # curl / local GUI with token
+
+        def _token_ok(self) -> bool:
+            return self.headers.get("X-AO-Token", "") == token
+
+        def _mutating(self, action: str):
+            if not self._token_ok():
+                return self._send(403, json.dumps({"ok": False, "reason": "bad_token"}), "application/json")
+            if not self._origin_ok():
+                return self._send(403, json.dumps({"ok": False, "reason": "bad_origin"}), "application/json")
+            try:
+                if action == "preflight":
+                    r = pf.run()
+                elif action == "publish":
+                    st = studio.state()
+                    d = st.get("next_detail") or {}
+                    r = studio.publish(gate=d.get("gate", ""), notes=d.get("deliver", ""))
+                else:
+                    r = studio.retract(studio.state()["current"])
+            except Exception as exc:  # noqa: BLE001 - return the error, never crash the UI
+                r = {"ok": False, "reason": "exception", "detail": f"{type(exc).__name__}: {exc}"}
+            return self._send(200, json.dumps(r, ensure_ascii=False), "application/json")
+
+        def do_POST(self):
+            path = urlparse(self.path).path
+            if path == "/api/preflight":
+                return self._mutating("preflight")
+            if path == "/publish":
+                return self._mutating("publish")
+            if path == "/retract":
+                return self._mutating("retract")
+            if path == "/api/update/stage":
+                if not self._token_ok():
+                    return self._send(403, json.dumps({"ok": False, "reason": "bad_token"}),
+                                      "application/json")
+                if not self._origin_ok():
+                    return self._send(403, json.dumps({"ok": False, "reason": "bad_origin"}),
+                                      "application/json")
+                try:
+                    length = int(self.headers.get("Content-Length", "0") or 0)
+                    body = self.rfile.read(min(length, 4096)) if length else b"{}"
+                    payload = json.loads(body.decode("utf-8") or "{}")
+                    r = studio.stage_update(str(payload.get("version", "")))
+                except Exception as exc:  # noqa: BLE001
+                    r = {"ok": False, "reason": "exception", "detail": f"{type(exc).__name__}: {exc}"}
+                return self._send(200, json.dumps(r, ensure_ascii=False), "application/json")
+            return self._send(404, "not found")
+
         def do_GET(self):
             path = urlparse(self.path).path
             st = studio.state()
             if path == "/api/state":
                 return self._send(200, json.dumps(st, ensure_ascii=False), "application/json")
+            if path == "/api/update":
+                payload = {"current": st.get("current"),
+                           "updates": studio.available_updates(),
+                           "staged_dir": studio.checkout_updates_dir()}
+                return self._send(200, json.dumps(payload, ensure_ascii=False), "application/json")
             if path == "/api/versions":
                 return self._send(200, json.dumps(studio.versions_full(), ensure_ascii=False),
                                   "application/json")
@@ -68,19 +130,12 @@ def _server(studio: ReleaseStudio, pf: Preflight):
             if path.startswith("/release/"):
                 v = path.rsplit("/", 1)[-1]
                 return self._send(200, _github_release_page(studio, v))
-            if path == "/api/preflight":
-                r = pf.run()
-                return self._send(200, json.dumps(r, ensure_ascii=False), "application/json")
-            if path in ("/publish", "/retract"):
-                # Actions are local-GUI triggers (control socket equivalent).
-                if path == "/publish":
-                    d = st.get("next_detail") or {}
-                    r = studio.publish(preflight_ok=pf.run()["ok"], gate=d.get("gate", ""),
-                                       notes=d.get("deliver", ""))
-                else:
-                    r = studio.retract(st["current"])
-                return self._send(200, json.dumps(r, ensure_ascii=False), "application/json")
-            return self._send(200, PAGE)
+            if path in ("/publish", "/retract", "/api/preflight", "/api/update/stage"):
+                # State-changing endpoints are POST-only; a browser prefetch or
+                # an <img src> must never be able to release a version.
+                return self._send(405, json.dumps({"ok": False, "reason": "use POST"}, ensure_ascii=False),
+                                  "application/json")
+            return self._send(200, PAGE.replace("__AO_TOKEN__", token))
 
     return Handler
 
@@ -94,7 +149,8 @@ def _version_page(studio, v: str) -> str:
     d = studio.version_detail(v)
     if not d:
         return f"<!doctype html><meta charset=utf-8><p>unknown version { _esc(v) }</p>"
-    rel = "已发布 ✅" if d.get("released") else "未发布"
+    rel = ("基线版本（无发布回执）" if d.get("baseline") else
+           ("已发布 ✅" if d.get("released") else "未发布"))
     rel_at = d.get("released_at") or "—"
     return f"""<!doctype html><meta charset=utf-8><title>{_esc(v)}</title>
 <style>body{{font-family:ui-sans-serif,system-ui;background:#f5f6f8;color:#1a1c1e;margin:0;padding:24px}}
@@ -182,10 +238,16 @@ pre{background:#0e1116;color:#e6e6e6;padding:12px;border-radius:8px;overflow:aut
 </div>
 <div class=card><table id=checks><tr><th>检查</th><th>结果</th><th>耗时</th></tr></table></div>
 <div class=card>
+  <h2 style="font-size:16px;margin:0 0 8px">更新通道</h2>
+  <button onclick="checkUpdate()">检查更新 Check updates</button>
+  <div id=upd class=mono style="font-size:13px;margin-top:8px"></div>
+</div>
+<div class=card>
   <h2 style="font-size:16px;margin:0 0 8px">全部版本历史（1.0.0 → 3.0.3，共 121 项）</h2>
   <div id=versions class=mono style="font-size:13px"></div>
 </div>
 <script>
+const AO_TOKEN="__AO_TOKEN__";
 function log(s){document.getElementById('log').textContent+=s+'\\n'}
 function state(){return fetch('/api/state').then(r=>r.json()).then(s=>{
   document.getElementById('total').textContent='('+s.total_versions+' versions)';
@@ -196,7 +258,7 @@ function state(){return fetch('/api/state').then(r=>r.json()).then(s=>{
    ('闸门键: '+(s.next_detail.gate||'—')+' | 交付: '+(s.next_detail.deliver||'—')+' | 验收: '+(s.next_detail.acceptance||'—')):'';
 })}
 function pre(){log('=== preflight start ===');
-  fetch('/api/preflight').then(r=>r.json()).then(r=>{
+  fetch('/api/preflight',{method:'POST',headers:{'X-AO-Token':AO_TOKEN}}).then(r=>r.json()).then(r=>{
     var t=document.getElementById('checks');t.innerHTML='<tr><th>检查</th><th>结果</th><th>耗时</th></tr>';
     r.checks.forEach(c=>{var tr=t.insertRow();tr.insertCell().textContent=c.name;
       var d=tr.insertCell();d.className=c.ok?'ok':'fail';d.textContent=c.ok?'OK':'FAIL';
@@ -204,7 +266,24 @@ function pre(){log('=== preflight start ===');
     document.getElementById('pub').disabled=!r.publish_enabled;
     log('=== preflight '+(r.ok?'GREEN':'RED')+'; publish '+(r.publish_enabled?'enabled':'disabled')+' ===');
   });}
-function act(p){log('POST '+p);fetch(p).then(r=>r.json()).then(j=>{log(JSON.stringify(j));state();versions();});}
+function act(p){log('POST '+p);fetch(p,{method:'POST',headers:{'X-AO-Token':AO_TOKEN}}).then(r=>r.json()).then(j=>{log(JSON.stringify(j));state();versions();});}
+function checkUpdate(){fetch('/api/update').then(r=>r.json()).then(j=>{
+  var box=document.getElementById('upd');box.innerHTML='';
+  if(!j.updates.length){box.textContent='当前 '+j.current+'，没有可用更新（release/updates/manifest.json 为空）。';return;}
+  j.updates.forEach(function(u){
+    var row=document.createElement('div');
+    row.style.cssText='border-bottom:1px solid #eee;padding:6px';
+    row.innerHTML='<b>'+u.version+'</b> '+u.file+' · '+(u.hash_ok?'哈希校验通过':'哈希不符')+' · '+(u.exists?'已就绪':'文件缺失');
+    if(u.hash_ok&&u.exists){
+      var b=document.createElement('button');b.textContent='暂存到 updates/staged';
+      b.style.marginLeft='10px';b.onclick=function(){stageUpdate(u.version)};
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  });
+})}
+function stageUpdate(v){fetch('/api/update/stage',{method:'POST',headers:{'X-AO-Token':AO_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({version:v})})
+  .then(r=>r.json()).then(j=>{log('stage '+v+': '+JSON.stringify(j))});}
 function versions(){fetch('/api/versions').then(r=>r.json()).then(list=>{
   var box=document.getElementById('versions');box.innerHTML='';
   list.forEach(function(v){
@@ -258,115 +337,9 @@ def _have_python() -> str:
 
 def make_server(root: str, port: int = 8765):
     studio = ReleaseStudio(root)
-    pf = Preflight()
-    py = _have_python()
-
-    def compile_check():
-        if not py:
-            return True, "frozen build: compile check done at build time (skipped at runtime)"
-        import py_compile
-        files = []
-        for base, _d, names in os.walk(os.path.join(root, "src")):
-            for n in names:
-                if n.endswith(".py"):
-                    files.append(os.path.join(base, n))
-        try:
-            for f in files:
-                py_compile.compile(f, doraise=True)
-            return True, f"compileall: {len(files)} files OK"
-        except Exception as exc:  # noqa: BLE001
-            return False, str(exc)
-
-    def test_check():
-        if not py:
-            return True, "frozen build: unit tests run from source (skipped at runtime)"
-        import subprocess
-        p = subprocess.run([py, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
-                           cwd=root, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace")
-        out = (p.stdout or "") + (p.stderr or "")
-        return p.returncode == 0, out[-2000:]
-
-    def builtin_selftest():
-        """Real in-process self-test of the bundled core libraries.
-
-        Used in the frozen EXE where no external python is available. It
-        exercises the same code paths (FVC-R budget/receipt, Ed25519 signing,
-        ledger bundle verify) instead of pretending to pass.
-        """
-        try:
-            from autonomic import fvc, signing, ledger
-            # budget must refuse at zero
-            acct = fvc.BudgetAccount(fvc.Budget(bytes=0, files=0, actions=0, blast=0, rate=0))
-            ok, _ = acct.debit({"bytes": 1})
-            assert not ok, "zero budget must refuse"
-            # receipt must require undo
-            try:
-                fvc.Receipt(trace_id="t", fact_refs=["f"], verdict={"id": "v"},
-                            covenant={"a": 1}, txn={"id": "x"}, undo={})
-                raise AssertionError("receipt without undo must fail")
-            except ValueError:
-                pass
-            # Ed25519 RFC 8032 TEST 1 vector
-            seed = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
-            pub = bytes.fromhex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
-            sig = bytes.fromhex("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155"
-                                "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
-            assert signing.sign(seed, b"") == sig, "ed25519 vector mismatch"
-            assert signing.verify(pub, b"", sig), "ed25519 verify failed"
-            # ledger bundle sign+verify round-trip
-            s2, _pub2 = signing.generate_keypair()
-            b = ledger.export_bundle([{"seq": 1, "epoch": 1, "hash": "a", "id": "c"}], [],
-                                     private_seed=s2)
-            r = ledger.verify_bundle(b)
-            assert r["ok"] and r["signature_ok"], "bundle verify failed"
-            return True, "builtin self-test: budget/receipt/ed25519/ledger OK"
-        except Exception as exc:  # noqa: BLE001
-            return False, f"builtin self-test failed: {exc}"
-
-    def roadmap_check():
-        try:
-            vs = studio.versions()
-            ok = len(vs) == 120
-            return ok, f"roadmap: {len(vs)} versions parsed"
-        except Exception as exc:  # noqa: BLE001
-            return False, f"roadmap parse failed: {exc}"
-
-    def manifest_check():
-        mp = os.path.join(os.path.dirname(root), "MANIFEST.json")
-        if not os.path.exists(mp):
-            mp = os.path.join(root, "MANIFEST.json")
-        if not os.path.exists(mp):
-            return True, "no MANIFEST.json (source mode)"
-        try:
-            import hashlib
-            with open(mp, "r", encoding="utf-8") as fh:
-                m = json.load(fh)
-            base = os.path.dirname(mp)
-            bad = []
-            for f in m.get("files", []):
-                p = os.path.join(base, f["path"])
-                if not os.path.exists(p):
-                    bad.append(f["path"]); continue
-                h = hashlib.sha256()
-                with open(p, "rb") as fh:
-                    for chunk in iter(lambda: fh.read(65536), b""):
-                        h.update(chunk)
-                if h.hexdigest() != f["sha256"]:
-                    bad.append(f["path"])
-            return (not bad), (f"manifest: {len(m.get('files', []))} files, {len(bad)} bad")
-        except Exception as exc:  # noqa: BLE001
-            return False, f"manifest verify failed: {exc}"
-
-    pf.add("roadmap", roadmap_check)
-    pf.add("manifest", manifest_check)
-    if getattr(sys, "frozen", False):
-        # The portable EXE is self-contained: verify its own bundled logic.
-        pf.add("builtin self-test", builtin_selftest)
-    else:
-        pf.add("compile", compile_check)
-        pf.add("unit tests", test_check)
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), _server(studio, pf))
+    pf = build_preflight(root, studio)
+    token = secrets.token_urlsafe(18)
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), _server(studio, pf, token))
     return httpd
 
 

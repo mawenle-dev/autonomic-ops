@@ -3,6 +3,44 @@
 本文件记录项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 自 1.0.1 起按《施工宪法》逐版施工：一版一件事，先有失败测试再实现，未发布版本标注状态，闸门键在发布时才开启。
 
+## [1.1.0] - 2026-11-18 (unreleased: constitution runtime)
+
+### Added（运行时，不再是“只有模型”）
+- **宪法运行时 `runtime.py`**：`Covenant` 物化、五维 **持久预算**（重启不清零）、
+  **回执链**（`prev_hash → hash`）、反账统一落盘、可选双签。
+- `ActionExecutor.execute()` 现在对每个真正执行的动作（成功/失败）生成回执，
+  并把 `receipt_id/hash/seq` 写入审计记录。
+- `file.delete.hard`：`confirm=DELETE` + 双钥 + 非目录/非链接；未配置双钥直接拒绝。
+- `config.example.yaml` 新增 `constitution:` 段（预算/窗口/双钥）。
+
+### Fixed（审查发现、并有测试覆盖）
+- `log.rotate` 不再 `unlink`，旧代际进 quarantine；修 `keep=0` 的空切片 bug。
+- `_verify_service` 没有验证目标时返回 False，不再把“未验证”当健康。
+- `bootstrap` 的模拟部署/打包排除 `.tools/.vm/.secrets/dist/portable`；
+  删除 `release/portable` 的递归空目录树（`File name too long` 根因）。
+- `ProveHarness.run_all({})` 缺省演练判红，不再“空跑全通”。
+
+### Changed（发布台门禁）
+- `publish()` 不再接受 `preflight_ok`：发布器内部跑 `build_preflight()`；
+  发布前对 `src/` 做内容封存（seal），无源码即拒发。
+- 预检 fail-closed：MANIFEST 缺失、src 为空、路线图乱序/重复/当前版本不在表内 → 红。
+- `/publish`、`/retract`、`/api/preflight` 改 POST-only + `X-AO-Token` + Origin 校验。
+- `retract()` 清理 `released.json` 与 channel，撤回后可重新发布。
+- 没有 git 时发布前置拒绝（`git_not_available`），不再产生 `tag_failed` 半成品。
+
+### Added（第二轮：校验与更新通道）
+- `ReceiptJournal.verify_chain()`：逐条复算回执哈希与前序链接，返回首个断点；
+  `constitution status` 命令输出契约、预算、回执链、反账与双钥状态。
+- 发布台更新通道：`release/updates/manifest.json` + `GET /api/update` +
+  `POST /api/update/stage`，只校验与暂存，不在运行中替换自身。
+- `tools/update_manifest.py`（生成/复核更新清单）、
+  `tools/snapshot_version.py`（生成本地版本快照，不覆盖历史）。
+- 发布状态去伪：基线 `1.0.0` 不再硬编码为已发布，状态仅来自 `released.json`。
+
+### Docs
+- 新增 `docs/memory/`（项目记忆/决策/工作日志）、`docs/human/`（操作手册与版本规划）、
+  `docs/handover/AI_HANDOVER.md`；旧交付说明移入 `docs/handover/`。
+
 ## [2026-11-18 晚] 删除 Windows 降级；逐版本文档；签名快照更新；追加式 GitHub 发布
 
 ### Removed（平台策略）

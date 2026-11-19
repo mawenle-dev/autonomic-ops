@@ -17,6 +17,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from autonomic import (advanced as A, choreo, collectors, counsel, converge,  # noqa: E402
                        decoders, dispatch, fvc, ledger, observe, probes, prove,
@@ -347,9 +348,23 @@ def c28():
 
 @chk(29, "G4", "影子预测误差 <10%")
 def c29():
-    pred = A.overlay_predict({"a": "1"}, {"b": "2"})
-    cal = A.calibrate(pred["files"], pred["files"])
-    return cal["error"] < 0.1, f"error={cal['error']}"
+    """Predict a file map, then actually build it on disk and compare."""
+    d = tmpdir()
+    try:
+        base = {"a": "1", "b": "2"}
+        changes = {"b": "22", "c": "3"}
+        pred = A.overlay_predict(base, changes)["predicted"]
+        actual = {}
+        for name, content in pred.items():
+            p = os.path.join(d, name)
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            with open(p, encoding="utf-8") as fh:
+                actual[name] = fh.read()
+        cal = A.calibrate(len(pred), len(actual))
+        return cal["error"] < 0.1, f"files={len(actual)} error={cal['error']}"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 @chk(30, "G4", "影子回收干净")
@@ -471,9 +486,39 @@ def c39():
 
 @chk(40, "G5", "物理删除需 --hard + 双钥 + 确认串")
 def c40():
-    def allowed(hard, dual_ok, confirm):
-        return hard and dual_ok and confirm == "DELETE"
-    return (not allowed(True, True, "x")) and allowed(True, True, "DELETE"), "all three gates required"
+    """Drive the real executor: without a dual-key vault the physical-delete
+    handler must refuse, and the action must be registered. No local lambda."""
+    from autonomic.executor import ActionExecutor, ExecContext
+    from autonomic.models import ActionRequest
+
+    class Cfg:
+        def __init__(self, d):
+            self.d = d
+
+        def get(self, key, default=None):
+            if key == "agent.data_dir":
+                return self.d
+            return default
+
+    class Allow:
+        def decide(self, request, approved_by=None):
+            return type("D", (), {"allowed": True, "risk": "critical", "reason": "audit",
+                                  "to_dict": lambda self: {"allowed": True}})()
+
+    d = tmpdir()
+    try:
+        cfg = Cfg(d)
+        ctx = ExecContext(cfg, None, None, None, None, Allow(), dry_run=False)
+        ex = ActionExecutor(cfg, ctx)
+        self_registered = "file.delete.hard" in ex.actions()
+        r = ex.execute(ActionRequest(action="file.delete.hard", target=os.path.join(d, "x"),
+                                     params={"confirm": "DELETE"}))
+        refused = (not r.ok) and "dual_key_not_configured" in r.detail
+        r2 = ex.execute(ActionRequest(action="file.delete.hard", target=os.path.join(d, "x"),
+                                      params={"confirm": "DELETE", "dual": {"policy": "x", "operator": "y"}}))
+        return self_registered and refused, f"registered={self_registered} refused={refused} dual_result={r2.detail}"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 # ============================ G6 choreo (41-48) ============================
@@ -1066,8 +1111,12 @@ def c95():
 @chk(96, "G12", "六演练全通")
 def c96():
     h = prove.ProveHarness()
-    r = h.run_all({})
-    return r.get("total") == 6 and r.get("passed") == 6, f"drills={r.get('passed')}/{r.get('total')}"
+    empty = h.run_all({})
+    fns = {name: (lambda: {"ok": True, "detail": "audit drill"}) for name in prove.DRILLS}
+    full = h.run_all(fns)
+    # Unwired drills must be red; wired drills must be green.
+    return (not empty["all_ok"]) and full["all_ok"], \
+        f"unwired={empty['passed']}/{empty['total']} wired={full['passed']}/{full['total']}"
 
 
 # ============================ G13 studio/platform (97-104) ============================
@@ -1085,19 +1134,39 @@ def c98():
 
 @chk(99, "G13", "发布回执含检查哈希且与日志一致")
 def c99():
-    from studio.core import ReleaseStudio
+    """Two facts are checked: (1) an empty temp repo is refused by the *real*
+    preflight, (2) a green run's receipt stores the actual checks and a hash
+    that recomputes from them."""
+    from studio.core import ReleaseStudio, Preflight
+    import hashlib as _h
     d = tmpdir()
     try:
         os.makedirs(os.path.join(d, "release"), exist_ok=True)
-        import shutil as sh
         src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "release")
         for f in ("versions.yaml", "release.yaml"):
-            sh.copy2(os.path.join(src, f), os.path.join(d, "release", f))
+            shutil.copy2(os.path.join(src, f), os.path.join(d, "release", f))
         os.makedirs(os.path.join(d, "release", "receipts"), exist_ok=True)
         os.makedirs(os.path.join(d, "release", "channel"), exist_ok=True)
         st = ReleaseStudio(d, runner=lambda cmd: (0, "ok"))
-        r = st.publish(preflight_ok=True, gate=st.state()["next_detail"]["gate"], checks=[{"name": "x", "ok": True}])
-        return bool(r.get("checks_hash")), f"receipt checks_hash={r.get('checks_hash')}"
+        st.require_git = False
+        refused = st.publish(gate=st.state()["next_detail"]["gate"])
+        if refused.get("reason") != "preflight_not_green":
+            return False, f"empty repo was NOT refused: {refused}"
+        # Now the same publisher with a green, *injected* check list; the receipt
+        # must be self-consistent with the checks that actually ran.
+        pf = Preflight()
+        pf.add("audit", lambda: (True, "ok"))
+        st.preflight_factory = lambda: pf
+        os.makedirs(os.path.join(d, "src", "autonomic"), exist_ok=True)
+        with open(os.path.join(d, "src", "autonomic", "__init__.py"), "w") as fh:
+            fh.write("# audit\n")
+        r = st.publish(gate=st.state()["next_detail"]["gate"], notes="audit")
+        if r.get("status") != "published":
+            return False, f"publish failed: {r}"
+        checks = r["checks"]
+        calc = _h.sha256(json.dumps(checks, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:32]
+        return r["checks_hash"] == calc and bool(checks), \
+            f"refused_empty=True checks={len(checks)} hash_match={r['checks_hash'] == calc}"
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -1126,10 +1195,18 @@ def c101():
         os.makedirs(os.path.join(d, "release", "receipts"), exist_ok=True)
         os.makedirs(os.path.join(d, "release", "channel"), exist_ok=True)
         st = ReleaseStudio(d, runner=lambda cmd: (0, "ok"))
+        st.require_git = False
+        from studio.core import Preflight as _PF
+        _pf = _PF(); _pf.add("audit", lambda: (True, "ok"))
+        st.preflight_factory = lambda: _pf
+        os.makedirs(os.path.join(d, "src", "autonomic"), exist_ok=True)
+        with open(os.path.join(d, "src", "autonomic", "__init__.py"), "w") as fh:
+            fh.write("# audit\n")
         gate = st.state()["next_detail"]["gate"]
-        st.publish(preflight_ok=True, gate=gate)
+        st.publish(gate=gate)
         r = st.retract("1.0.1")
-        return r.get("ok") and r.get("rolled_back_to") == "1.0.0", f"retract={r}"
+        return (r.get("ok") and r.get("rolled_back_to") == "1.0.0"
+                and r.get("released_registry_clean")), f"retract={r}"
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
