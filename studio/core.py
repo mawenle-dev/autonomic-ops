@@ -574,6 +574,8 @@ class ReleaseStudio:
             self._write_channel(target)
             self._record_release(target)
             self._write_version_snapshot(target, st["next_detail"])
+            self._mark_version_doc(target, published=True)
+            self._write_release_status()
         with open(os.path.join(self.receipts_dir, f"{target}.json"), "w", encoding="utf-8") as fh:
             json.dump(receipt, fh, ensure_ascii=False, sort_keys=True)
         return receipt
@@ -595,6 +597,63 @@ class ReleaseStudio:
                 f"- 发布日期：{time.strftime('%Y-%m-%d')}\n")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(body)
+
+    def _mark_version_doc(self, version: str, published: bool, date: str = "") -> None:
+        """Keep the per-version page's release status in sync with the registry.
+
+        Pages are generated ahead of time, so their status line must be updated
+        when a version is actually published or retracted. The rest of the page
+        is left untouched.
+        """
+        path = os.path.join(self.root, "release", "docs", f"{version}.md")
+        if not os.path.exists(path):
+            return
+        date = date or time.strftime("%Y-%m-%d")
+        status = (f"已发布（{date}，GitHub Release v{version}）" if published
+                  else f"未发布（{date} 已撤回）")
+        with open(path, "r", encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        replaced = False
+        for i, line in enumerate(lines):
+            if line.startswith("- 发布状态："):
+                lines[i] = f"- 发布状态：{status}"
+                replaced = True
+                break
+        if not replaced:
+            insert_at = 5 if len(lines) > 4 else len(lines)
+            lines.insert(insert_at, f"- 发布状态：{status}")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+
+    def _write_release_status(self) -> None:
+        """Generate the single source of truth shown to readers.
+
+        README links here instead of hard-coding a version, so the landing page
+        cannot drift from the release registry.
+        """
+        path = os.path.join(self.root, "docs", "human", "发布状态.md")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        released = self.released()
+        cur = read_release_version(self.release_yaml())
+        st = self.state()
+        versions = sorted(released.keys(), key=_version_key, reverse=True)
+        lines = ["# 发布状态（自动生成）", "",
+                 "> 本文件由发布器写入，请勿手工修改。",
+                 "",
+                 f"- 当前版本：`{cur}`",
+                 f"- 待发布版本：`{st.get('next') or '—'}`",
+                 f"- 已回执发布：{len(versions)} 个"] 
+        if versions:
+            latest = versions[0]
+            info = released[latest]
+            lines.append(f"- 最近发布：`{latest}`（{info.get('date', '')}）")
+            lines.append(f"- 发布记录：https://github.com/{self.account()['owner']}/"
+                         f"{self.account()['repo']}/releases/tag/v{latest}")
+        else:
+            lines.append("- 最近发布：无")
+        lines += ["", "完整台账见 `release/released.json`，逐版回执见 `release/receipts/`。"]
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
 
     def _forget_release(self, version: str) -> None:
         """Remove a version from the *published* registry (used by retract)."""
@@ -618,6 +677,8 @@ class ReleaseStudio:
         # A retract must make the system *releasable again*: remove the version
         # from released.json, otherwise the next publish hits already_released.
         self._forget_release(version)
+        self._mark_version_doc(version, published=False)
+        self._write_release_status()
         prev = receipt.get("previous")
         if prev:
             write_release_version(self.release_yaml(), prev)
